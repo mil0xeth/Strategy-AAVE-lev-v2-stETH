@@ -4,7 +4,8 @@ from brownie import chain, reverts
 def test_high_profit_causes_healthcheck_revert(
     vault, strategy, token, token_whale, gov, healthCheck
 ):
-    profitLimit = healthCheck.setProfitLimitRatio(100, {'from': gov})
+    healthCheck.setProfitLimitRatio(100, {'from': gov})
+    profitLimit = healthCheck.profitLimitRatio()
     maxBPS = 10_000
 
     # Send some funds to the strategy
@@ -13,9 +14,7 @@ def test_high_profit_causes_healthcheck_revert(
     chain.sleep(1)
     strategy.harvest({"from": gov})
 
-    token.transfer(
-        strategy,
-        vault.strategies(strategy).dict()["totalDebt"] * ((profitLimit + 1) / maxBPS),
+    token.transfer(strategy, vault.strategies(strategy).dict()["totalDebt"] * ((profitLimit + 1) / maxBPS),
         {"from": token_whale},
     )
     with reverts("!healthcheck"):
@@ -47,8 +46,8 @@ def test_profit_under_max_ratio_does_not_revert(
     assert True
 
 
-def DISABLED_high_loss_causes_healthcheck_revert(
-    vault, test_strategy, token, token_whale, gov, healthCheck
+def test_high_loss_causes_healthcheck_revert(
+    vault, test_strategy, token, token_whale, gov, healthCheck, yieldBearing
 ):
     healthCheck.setlossLimitRatio(1, {'from': gov})
     lossRatio = healthCheck.lossLimitRatio()
@@ -56,44 +55,20 @@ def DISABLED_high_loss_causes_healthcheck_revert(
 
     # Send some funds to the strategy
     token.approve(vault.address, 2 ** 256 - 1, {"from": token_whale})
-    vault.deposit(50 * (10 ** token.decimals()), {"from": token_whale})
+    vault.deposit(10000 * (10 ** token.decimals()), {"from": token_whale})
     chain.sleep(1)
     test_strategy.harvest({"from": gov})
 
     # Unlock part of the collateral
-    test_strategy.freeCollateral(test_strategy.balanceOfMakerVault() * (0.5 + ((lossRatio + 1) / maxBPS)), 0)
+    #test_strategy.freeCollateral(test_strategy.balanceOfMakerVault() * (0.5 + ((lossRatio + 1) / maxBPS)), 0)
+    lowestCollateralizationRatio = 1020000000000000001
+    test_strategy.freeCollateral(test_strategy.balanceOfMakerVault()*(test_strategy.getCurrentMakerVaultRatio()-lowestCollateralizationRatio)/test_strategy.getCurrentMakerVaultRatio(), 0, {"from": gov})
 
     # Simulate loss by transferring away unlocked collateral
     token.transfer(token_whale, token.balanceOf(test_strategy), {"from": test_strategy})
+    yieldBearing.transfer(token_whale, yieldBearing.balanceOf(test_strategy), {"from": test_strategy})
 
     vault.updateStrategyDebtRatio(test_strategy, 5_000, {"from": gov})
 
     with reverts("!healthcheck"):
         test_strategy.harvest({"from": gov})
-
-
-def test_loss_under_max_ratio_does_not_revert(
-    vault, test_strategy, token, token_whale, gov, healthCheck
-):
-    lossRatio = healthCheck.lossLimitRatio()
-    maxBPS = 10_000
-
-    # Send some funds to the strategy
-    token.approve(vault.address, 2 ** 256 - 1, {"from": token_whale})
-    vault.deposit(1 * (10 ** token.decimals()), {"from": token_whale})
-    chain.sleep(1)
-    test_strategy.harvest({"from": gov})
-
-    # Unlock part of the collateral
-    test_strategy.freeCollateral(
-        test_strategy.balanceOfMakerVault() * (0.5 + ((lossRatio - 1) / maxBPS)), 0
-    )
-
-    # Simulate loss by transferring away unlocked collateral
-    token.transfer(token_whale, token.balanceOf(test_strategy), {"from": test_strategy})
-
-    vault.updateStrategyDebtRatio(test_strategy, 5_000, {"from": gov})
-
-    test_strategy.harvest({"from": gov})
-
-    assert True

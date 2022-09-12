@@ -3,7 +3,7 @@ pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
 import "./Strategy.sol";
-import "../interfaces/yearn/IOSMedianizer.sol";
+//import "../interfaces/yearn/IOSMedianizer.sol";
 
 // The purpose of this wrapper contract is to expose internal functions
 // that may contain application logic and therefore need to be unit tested.
@@ -30,38 +30,31 @@ contract TestStrategy is Strategy {
 //            _chainlinkWantToETHPriceFeed
         )
     {}
-/*
+
     function _liquidatePosition(uint256 _amountNeeded)
         public
         returns (uint256 _liquidatedAmount, uint256 _loss)
     {
         (_liquidatedAmount, _loss) = liquidatePosition(_amountNeeded);
     }
-*/
-/*
+
     function _getWantPrice() public view returns (uint256) {
         return getWantPerYieldBearing();
     }
-*/
-/*
+
     function _getYieldBearingPrice() public view returns (uint256) {
         return getWantPerYieldBearing();
     }
 
-    }
-
-
-*/
-/*
     function freeCollateral(uint256 collateralAmount, uint256 daiAmount) public {
         _checkAllowance(
             MakerDaiDelegateLib.daiJoinAddress(),
-            address(investmentToken),
+            address(borrowToken),
             daiAmount
         );
-        return _freeCollateralAndRepayDai(collateralAmount, daiAmount);
+        return MakerDaiDelegateLib.wipeAndFreeGem(gemJoinAdapter, cdpId, collateralAmount, daiAmount);
     }
-
+/*
     function repayDebt(uint256 _amount) public {
         return _repayDebt(_amount);
     }

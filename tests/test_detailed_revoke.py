@@ -40,19 +40,28 @@ def test_revoke_strategy_from_strategy(
 
 
 def test_revoke_with_profit(
-    token, dai, vault, strategy, token_whale, gov, borrow_token, borrow_whale, yvault,
+    token, dai, vault, strategy, token_whale, gov, borrow_token, borrow_whale, partnerToken, Contract
 ):
     token.approve(vault, 2 ** 256 - 1, {"from": token_whale})
-    vault.deposit(20 * (10 ** token.decimals()), {"from": token_whale})
+    toadd = 2000 * (10 ** token.decimals())
+    vault.deposit(toadd, {"from": token_whale})
     chain.sleep(1)
     strategy.harvest({"from": gov})
 
+    vault.setPerformanceFee(0, {"from":gov})
+
     assert vault.strategies(strategy).dict()["totalGain"] == 0
     assert vault.strategies(strategy).dict()["debtRatio"] == 10_000
-    assert vault.strategies(strategy).dict()["totalDebt"]/1e18 == 20
+    assert vault.strategies(strategy).dict()["totalDebt"] == toadd
 
-    # Send some profit to yvault
-    borrow_token.transfer(yvault, 10_000_000 * (10 ** borrow_token.decimals()), {"from": borrow_whale})
+    #Create profits for UNIV3 DAI<->USDC
+    uniswapv3 = Contract("0xE592427A0AEce92De3Edee1F18E0157C05861564")
+    #token --> partnerToken
+    uniswapAmount = token.balanceOf(token_whale)*0.1
+    token.approve(uniswapv3, uniswapAmount, {"from": token_whale})
+    uniswapv3.exactInputSingle((token, partnerToken, 100, token_whale, 1856589943, uniswapAmount, 0, 0), {"from": token_whale})
+    chain.sleep(1)
+
     vault.revokeStrategy(strategy, {"from": gov})
     chain.sleep(1)
     strategy.harvest({"from": gov})

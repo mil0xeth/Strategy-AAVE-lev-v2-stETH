@@ -26,7 +26,7 @@ def wantNr():
 #Decide on yieldBearing = collateral Token on Money Market
 @pytest.fixture(autouse=True)
 def yieldBearingNr():    
-    yieldBearingNr = 0 #Currently: GUNIV3DAIUSDC1 0.05%
+    yieldBearingNr = 1 #Currently: GUNIV3DAIUSDC1 0.05%
     #0 = GUNIV3DAIUSDC1 0.0%,   1 =  
     yield yieldBearingNr
 #######################################################
@@ -90,12 +90,12 @@ def weth_amout(user, weth):
 
 @pytest.fixture
 def guniv3daiusdc1():
-    token_address = "0xAbDDAfB225e10B90D798bB8A886238Fb835e2053" #stETH
+    token_address = "0xAbDDAfB225e10B90D798bB8A886238Fb835e2053"
     yield Contract(token_address)
 
 @pytest.fixture
 def guniv3daiusdc2():
-    token_address = "0x50379f632ca68D36E50cfBC8F78fe16bd1499d1e"  # wstETH
+    token_address = "0x50379f632ca68D36E50cfBC8F78fe16bd1499d1e"  
     yield Contract(token_address)
 
 @pytest.fixture
@@ -162,8 +162,9 @@ def weth_whale(accounts):
     yield accounts.at("0x57757e3d981446d585af0d9ae4d7df6d64647806", force=True)
 
 @pytest.fixture
-def dai_whale(accounts):
-    yield accounts.at("0x47ac0fb4f2d84898e4d9e7b4dab3c24507a6d503", force=True)
+def dai_whale(accounts, dai):
+    #yield accounts.at("0x47ac0fb4f2d84898e4d9e7b4dab3c24507a6d503", force=True)
+    yield accounts.at("0xF977814e90dA44bFA03b6295A0616a897441aceC", force=True)
 
 @pytest.fixture
 def yvDAI():
@@ -330,6 +331,11 @@ def custom_osm(TestCustomOSM, gov):
 #@pytest.fixture
 #def custom_osm(TestCustomOSM, gov):
 #    yield TestCustomOSM.deploy({"from": gov})
+
+@pytest.fixture
+def basefeeChecker():
+    basefee = Contract("0xb5e1CAcB567d98faaDB60a1fD4820720141f064F")
+    yield basefee
 
 @pytest.fixture
 def strategy(vault, StrategyChoice, gov, osmProxy_want, osmProxy_yieldBearing, cloner, healthCheck):

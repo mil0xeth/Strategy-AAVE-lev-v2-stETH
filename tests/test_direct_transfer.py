@@ -1,6 +1,6 @@
 import pytest
 
-from brownie import chain
+from brownie import chain, ZERO_ADDRESS
 
 
 def test_direct_transfer_increments_estimated_total_assets(
@@ -33,8 +33,8 @@ def test_direct_transfer_increments_profits(
     assert (vault.strategies(strategy).dict()["totalGain"] > initialProfit)
 
 
-def test_borrow_token_transfer_sends_to_yvault(
-    vault, strategy, token, token_whale, borrow_token, borrow_whale, gov
+def test_borrow_token_transfer_invests(
+    vault, strategy, token, token_whale, borrow_token, borrow_whale, gov, Contract,
 ):
     token.approve(vault, 2 ** 256 - 1, {"from": token_whale})
     vault.deposit(1000 * (10 ** token.decimals()), {"from": token_whale})
@@ -44,10 +44,12 @@ def test_borrow_token_transfer_sends_to_yvault(
 
     amount = 4_000 * (10 ** borrow_token.decimals())
     borrow_token.transfer(strategy, amount, {"from": borrow_whale})
-
     chain.sleep(1)
+    with pytest.reverts("!healthcheck"):
+        strategy.harvest({"from": gov})
+    strategy.setHealthCheck(ZERO_ADDRESS, {"from": gov})
     strategy.harvest({"from": gov})
-    assert borrow_token.balanceOf(strategy) < 10000
+    assert borrow_token.balanceOf(strategy) < 10**token.decimals()
 
 
 def test_borrow_token_transfer_increments_profits(
@@ -63,6 +65,10 @@ def test_borrow_token_transfer_increments_profits(
     borrow_token.transfer(test_strategy, amount, {"from": borrow_whale})
 
     chain.sleep(1)
+    with pytest.reverts("!healthcheck"):
+        test_strategy.harvest({"from": gov})
+    test_strategy.setHealthCheck(ZERO_ADDRESS, {"from": gov})
+    test_strategy.setHealthCheck(ZERO_ADDRESS, {"from": gov})
     test_strategy.harvest({"from": gov})
 
     token_price = test_strategy._getYieldBearingPrice()
@@ -89,24 +95,27 @@ def test_deposit_should_not_increment_profits(vault, strategy, token, token_whal
     assert vault.strategies(strategy).dict()["totalGain"] == initialProfit
 
 
-def test_direct_transfer_with_actual_profits_1keth(
-    vault, token, token_whale, borrow_token, borrow_whale, yvault, gov, test_strategy
+def test_direct_transfer_with_actual_profits_100k(
+    vault, token, token_whale, borrow_token, borrow_whale, gov, test_strategy, partnerToken, Contract
 ):
     strategy = test_strategy
     initialProfit = vault.strategies(strategy).dict()["totalGain"]
     assert initialProfit == 0
 
     token.approve(vault, 2 ** 256 - 1, {"from": token_whale})
-    deposit_tx = vault.deposit(1000 * (10 ** token.decimals()), {"from": token_whale})
+    deposit_tx = vault.deposit(1e5 * (10 ** token.decimals()), {"from": token_whale})
 
     chain.sleep(1)
     harvest_tx = strategy.harvest({"from": gov})
     assert strategy.estimatedTotalAssets()/1e18 > 980 
 
-    # send some profit to yvault
-    borrow_token.transfer(
-        yvault, yvault.totalAssets()*0.05, {"from": borrow_whale}
-    )
+    #Create profits for UNIV3 DAI<->USDC
+    uniswapv3 = Contract("0xE592427A0AEce92De3Edee1F18E0157C05861564")
+    #token --> partnerToken
+    uniswapAmount = token.balanceOf(token_whale)*0.1
+    token.approve(uniswapv3, uniswapAmount, {"from": token_whale})
+    uniswapv3.exactInputSingle((token, partnerToken, 100, token_whale, 1856589943, uniswapAmount, 0, 0), {"from": token_whale})
+    chain.sleep(1)
 
     # sleep for a day
     chain.sleep(24 * 3600)
@@ -127,25 +136,27 @@ def test_direct_transfer_with_actual_profits_1keth(
 
 
 
-def test_direct_transfer_with_actual_profits_100(
-    vault, token, token_whale, borrow_token, borrow_whale, yvault, gov, test_strategy
+def test_direct_transfer_with_actual_profits_1000(
+    vault, token, token_whale, borrow_token, borrow_whale, gov, test_strategy, partnerToken, Contract
 ):
     strategy = test_strategy
     initialProfit = vault.strategies(strategy).dict()["totalGain"]
     assert initialProfit == 0
 
     token.approve(vault, 2 ** 256 - 1, {"from": token_whale})
-    deposit_tx = vault.deposit(100 * (10 ** token.decimals()), {"from": token_whale})
+    deposit_tx = vault.deposit(1000 * (10 ** token.decimals()), {"from": token_whale})
 
     chain.sleep(1)
     harvest_tx = strategy.harvest({"from": gov})
     assert strategy.estimatedTotalAssets()/1e18 > 99
 
-    # send some profit to yvault
-    borrow_token.transfer(
-        yvault, yvault.totalAssets()*0.05, {"from": borrow_whale}
-    )
-
+    #Create profits for UNIV3 DAI<->USDC
+    uniswapv3 = Contract("0xE592427A0AEce92De3Edee1F18E0157C05861564")
+    #token --> partnerToken
+    uniswapAmount = token.balanceOf(token_whale)*0.1
+    token.approve(uniswapv3, uniswapAmount, {"from": token_whale})
+    uniswapv3.exactInputSingle((token, partnerToken, 100, token_whale, 1856589943, uniswapAmount, 0, 0), {"from": token_whale})
+    chain.sleep(1)
     # sleep for a day
     chain.sleep(24 * 3600)
     chain.mine(1)
