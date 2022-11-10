@@ -90,7 +90,7 @@ contract Strategy is BaseStrategy {
         strategyName = _strategyName;
 
         //10M$ dai or usdc maximum trade
-        maxSingleTrade = 10_000_000 * 1e18;
+        maxSingleTrade = 5_000_000 * 1e18;
         //10M$ dai or usdc maximum trade
         minSingleTrade = 1 * 1e17;
 
@@ -213,7 +213,7 @@ contract Strategy is BaseStrategy {
             ? totalAssetsAfterProfit.sub(totalDebt)
             : 0;
         uint256 _amountFreed;
-        (_amountFreed, _loss) = liquidatePosition(Math.min(maxSingleTrade, _debtOutstanding.add(_profit)));
+        (_amountFreed, _loss) = liquidatePosition(_debtOutstanding.add(_profit));
         _debtPayment = Math.min(_debtOutstanding, _amountFreed);
         //Net profit and loss calculation
         if (_loss > _profit) {
@@ -243,7 +243,7 @@ contract Strategy is BaseStrategy {
                 uint256 currentCollateral = balanceOfMakerVault();
                 uint256 yieldBearingToRepay = currentCollateral.sub( currentCollateral.mul(currentRatio).div(collateralizationRatio)  );
                 uint256 wantAmountToRepay = yieldBearingToRepay.mul(getWantPerYieldBearing()).div(WAD);
-                MakerDaiDelegateLib.unwind(wantAmountToRepay, collateralizationRatio, cdpId);
+                MakerDaiDelegateLib.unwind(Math.min(wantAmountToRepay, maxSingleTrade), collateralizationRatio, cdpId);
             } else if (currentRatio > collateralizationRatio.add(upperRebalanceTolerance)) { //if current ratio is ABOVE goal ratio:
                 // Mint the maximum DAI possible for the locked collateral            
                 _lockCollateralAndMintDai(0, _borrowTokenAmountToMint(balanceOfMakerVault()).sub(balanceOfDebt()));
@@ -262,6 +262,8 @@ contract Strategy is BaseStrategy {
         override
         returns (uint256 _liquidatedAmount, uint256 _loss)
     {
+        //Maximum liquidation per tx is of size maxSingleTrade:
+        _wantAmountNeeded = Math.min(_wantAmountNeeded, maxSingleTrade);
         uint256 wantBalance = balanceOfWant();
         //Check if we can handle it without swapping free yieldBearing or freeing collateral yieldBearing
         if (wantBalance >= _wantAmountNeeded) {
@@ -279,6 +281,10 @@ contract Strategy is BaseStrategy {
         } else {
             _liquidatedAmount = _wantAmountNeeded;
             _loss = 0;
+        } 
+        //Check safety of collateralization ratio after all actions:
+        if (balanceOfMakerVault() > 0) {
+            require(getCurrentMakerVaultRatio() > collateralizationRatio.sub(lowerRebalanceTolerance), "unsafe collateralization");
         }
     }
 
@@ -386,13 +392,12 @@ contract Strategy is BaseStrategy {
         require(msg.sender == flashmint);
         require(initiator == address(this));
         (Action action, uint256 _cdpId, uint256 _wantAmountInitialOrRequested, uint256 flashloanAmount, uint256 _collateralizationRatio) = abi.decode(data, (Action, uint256, uint256, uint256, uint256));
-        //amount = flashloanAmount, then add fee
-        amount = amount.add(fee);
-        _checkAllowance(address(flashmint), address(borrowToken), amount);
+        _checkAllowance(address(flashmint), address(borrowToken), amount.add(fee));
         if (action == Action.WIND) {
             MakerDaiDelegateLib._wind(_cdpId, amount, _wantAmountInitialOrRequested, _collateralizationRatio);
         } else if (action == Action.UNWIND) {
-            MakerDaiDelegateLib._unwind(_cdpId, amount, _wantAmountInitialOrRequested, _collateralizationRatio);
+            //amount = flashloanAmount, amount.add(fee) = flashloanAmount+fee for flashloan (usually 0)
+            MakerDaiDelegateLib._unwind(_cdpId, amount, amount.add(fee), _wantAmountInitialOrRequested, _collateralizationRatio);
         }
         return keccak256("ERC3156FlashBorrower.onFlashLoan");
     }

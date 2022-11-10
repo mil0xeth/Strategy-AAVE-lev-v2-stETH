@@ -260,7 +260,30 @@ def test_higher_ratio_inside_rebalancing_band_should_not_repay_debt(
     test_strategy.harvest({"from": gov})
 
 
-    new_ratio = ( test_strategy.collateralizationRatio() + test_strategy.upperRebalanceTolerance() * 0.98 )
+    new_ratio = ( test_strategy.collateralizationRatio() + test_strategy.upperRebalanceTolerance() * 0.94 )
+    test_strategy.setCollateralizationRatio(new_ratio, {"from": gov})
+
+    assert test_strategy.tendTrigger(1) == False
+
+    # Adjust the position
+    test_strategy.tend({"from": gov})
+
+    # Strategy should restore collateralization ratio to target value on withdraw
+    assert (pytest.approx(test_strategy.collateralizationRatio(), rel=RELATIVE_APPROX) != test_strategy.getCurrentMakerVaultRatio())
+
+def test_higher_ratio_inside_rebalancing_band_should_not_repay_debt(
+    vault, test_strategy, token, amount, user, gov, RELATIVE_APPROX
+):
+    # Deposit to the vault
+    token.approve(vault.address, amount, {"from": user})
+    vault.deposit(amount, {"from": user})
+
+    # Harvest 1: Send funds through the strategy
+    chain.sleep(1)
+    test_strategy.harvest({"from": gov})
+
+
+    new_ratio = ( test_strategy.getCurrentMakerVaultRatio() + test_strategy.upperRebalanceTolerance() )
     test_strategy.setCollateralizationRatio(new_ratio, {"from": gov})
 
     assert test_strategy.tendTrigger(1) == False

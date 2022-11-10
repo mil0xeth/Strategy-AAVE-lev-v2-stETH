@@ -6,6 +6,7 @@ from brownie import chain, reverts, Wei, Contract
 def test_small_deposit_does_not_generate_debt_under_floor(
     vault, test_strategy, token, token_whale_BIG,borrow_token, gov, RELATIVE_APPROX_ROUGH, yieldBearing
 ):
+    test_strategy.setMinMaxSingleTrade(test_strategy.minSingleTrade(), 1e40, {"from": gov})
     #price = test_strategy._getYieldBearingPrice()
     #floor = Wei("15_000 ether")  # assume a price floor of 15k
     # Amount in want that generates 'floor' debt minus a treshold
@@ -30,6 +31,7 @@ def test_small_deposit_does_not_generate_debt_under_floor(
 def test_deposit_after_passing_debt_floor_generates_debt(
     vault, test_strategy, token, token_whale_BIG, borrow_token, gov, RELATIVE_APPROX, RELATIVE_APPROX_ROUGH, yieldBearing
 ):
+    test_strategy.setMinMaxSingleTrade(test_strategy.minSingleTrade(), 1e40, {"from": gov})
     #price = test_strategy._getYieldBearingPrice()
     #floor = Wei("14_000 ether")  # assume a price floor of 5k as in ETH-C
     token_floor = 300*10**token.decimals()
@@ -62,6 +64,7 @@ def test_deposit_after_passing_debt_floor_generates_debt(
 def test_withdraw_does_not_leave_debt_under_floor(
     vault, test_strategy, token, token_whale_BIG, dai, dai_whale, gov, RELATIVE_APPROX_ROUGH, partnerToken, token_whale
 ):
+    test_strategy.setMinMaxSingleTrade(test_strategy.minSingleTrade(), 1e40, {"from": gov})
     # Deposit to the vault and send funds through the strategy
     token.approve(vault.address, 2 ** 256 - 1, {"from": token_whale_BIG})
     vault.deposit(1000*10**token.decimals(), {"from": token_whale_BIG})
@@ -102,14 +105,14 @@ def test_large_deposit_does_not_generate_debt_over_ceiling(
     assert token.balanceOf(vault) == 0
 
     # Collateral ratio should be larger due to debt being capped by ceiling
-    assert (test_strategy.getCurrentMakerVaultRatio()/(10 ** token.decimals()) > 3)
+    assert (test_strategy.getCurrentMakerVaultRatio()/(10 ** token.decimals()) > 2.8)
 
 
 def test_withdraw_everything_with_vault_in_debt_ceiling(
     vault, test_strategy, token, token_whale_BIG, gov, RELATIVE_APPROX_ROUGH
 ):
+    test_strategy.setMinMaxSingleTrade(test_strategy.minSingleTrade(), 1e40, {"from": gov})
     amount = token.balanceOf(token_whale_BIG)
-
     # Deposit to the vault and send funds through the strategy
     token.approve(vault.address, 2 ** 256 - 1, {"from": token_whale_BIG})
     vault.deposit(amount, {"from": token_whale_BIG})
@@ -117,7 +120,7 @@ def test_withdraw_everything_with_vault_in_debt_ceiling(
     test_strategy.harvest({"from": gov})
 
     #test_strategy.setLeaveDebtBehind(False, {"from": gov})
-    vault.withdraw(vault.balanceOf(token_whale_BIG), token_whale_BIG, 1000, {"from": token_whale_BIG})
+    vault.withdraw(vault.balanceOf(token_whale_BIG), token_whale_BIG, {"from": token_whale_BIG})
     time.sleep(1)
 
     assert vault.strategies(test_strategy).dict()["totalDebt"] == 0
@@ -143,13 +146,14 @@ def test_large_want_balance_does_not_generate_debt_over_ceiling(
     assert token.balanceOf(vault) == 0
 
     # Collateral ratio should be larger due to debt being capped by ceiling
-    assert (test_strategy.getCurrentMakerVaultRatio()/(10 ** token.decimals()) > 3)
+    assert (test_strategy.getCurrentMakerVaultRatio()/(10 ** token.decimals()) > 2.8)
 
 
 # Fixture 'amount' is included so user has some balance
 def test_withdraw_everything_cancels_entire_debt(
     vault, test_strategy, token, token_whale_BIG, user, amount, dai, dai_whale, gov, RELATIVE_APPROX_LOSSY, partnerToken, token_whale
 ):
+    test_strategy.setMinMaxSingleTrade(test_strategy.minSingleTrade(), 1e40, {"from": gov})
     amount_user = 25000 * 10 ** token.decimals()
     amount_whale = token.balanceOf(token_whale_BIG)
 
@@ -180,7 +184,7 @@ def test_withdraw_everything_cancels_entire_debt(
 def test_tend_trigger_with_debt_under_dust_returns_false(
     vault, test_strategy, token, token_whale_BIG, gov
 ):
- 
+    test_strategy.setMinMaxSingleTrade(test_strategy.minSingleTrade(), 1e40, {"from": gov})
     # Amount in want that generates 'floor' debt minus a treshold
     token_floor = 200* 10 ** token.decimals()
 
@@ -200,6 +204,7 @@ def test_tend_trigger_without_more_mintable_dai_returns_false(
     vault, strategy, token, token_whale_BIG, gov
 ):
     # Deposit to the vault and send funds through the strategy
+    strategy.setMinMaxSingleTrade(strategy.minSingleTrade(), 1e40, {"from": gov})
     token.approve(vault.address, 2 ** 256 - 1, {"from": token_whale_BIG})
     vault.deposit(token.balanceOf(token_whale_BIG), {"from": token_whale_BIG})
     chain.sleep(1)
