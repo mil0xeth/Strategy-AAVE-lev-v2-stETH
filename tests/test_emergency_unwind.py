@@ -30,7 +30,7 @@ def test_passing_everything_should_repay_all_debt(
     chain.mine(1)
 
     prev_collat = strategy.balanceOfMakerVault()
-    strategy.emergencyDebtRepayment(strategy.estimatedTotalAssets(), {"from": vault.management()})
+    strategy.emergencyUnwind(strategy.estimatedTotalAssets(), {"from": vault.management()})
 
     # All debt is repaid and collateral is left untouched
     assert strategy.balanceOfDebt() == 0
@@ -75,7 +75,7 @@ def test_passing_everything_should_repay_all_debt_then_new_deposit_create_debt_a
     chain.mine(1)
 
     prev_collat = strategy.balanceOfMakerVault()
-    strategy.emergencyDebtRepayment(strategy.estimatedTotalAssets(), {"from": vault.management()})
+    strategy.emergencyUnwind(strategy.estimatedTotalAssets(), {"from": vault.management()})
 
     # All debt is repaid and collateral is left untouched
     assert strategy.balanceOfDebt() == 0
@@ -112,19 +112,19 @@ def test_passing_value_same_collat_ratio(
     assert ( pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == vault.totalAssets())
     collateralizationRatioBefore = strategy.getCurrentMakerVaultRatio()
     totalInitial = strategy.estimatedTotalAssets()
-    strategy.emergencyDebtRepayment(totalInitial*0.2, {"from": vault.management()})
+    strategy.emergencyUnwind(totalInitial*0.2, {"from": vault.management()})
     assert ( pytest.approx(strategy.getCurrentMakerVaultRatio(), rel=RELATIVE_APPROX) == collateralizationRatioBefore)
     assert ( pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == vault.totalAssets())
-    strategy.emergencyDebtRepayment(totalInitial*0.2, {"from": vault.management()})
+    strategy.emergencyUnwind(totalInitial*0.2, {"from": vault.management()})
     assert ( pytest.approx(strategy.getCurrentMakerVaultRatio(), rel=RELATIVE_APPROX) == collateralizationRatioBefore)
     assert ( pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == vault.totalAssets())
-    strategy.emergencyDebtRepayment(totalInitial*0.2, {"from": vault.management()})
+    strategy.emergencyUnwind(totalInitial*0.2, {"from": vault.management()})
     assert ( pytest.approx(strategy.getCurrentMakerVaultRatio(), rel=RELATIVE_APPROX) == collateralizationRatioBefore)
     assert ( pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == vault.totalAssets())
-    strategy.emergencyDebtRepayment(totalInitial*0.2, {"from": vault.management()})
+    strategy.emergencyUnwind(totalInitial*0.2, {"from": vault.management()})
     assert ( pytest.approx(strategy.getCurrentMakerVaultRatio(), rel=RELATIVE_APPROX) == collateralizationRatioBefore)
     assert ( pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == vault.totalAssets())
-    strategy.emergencyDebtRepayment(strategy.estimatedTotalAssets(), {"from": vault.management()})
+    strategy.emergencyUnwind(strategy.estimatedTotalAssets(), {"from": vault.management()})
  
     # All debt is repaid and collateral is left untouched
     assert strategy.balanceOfDebt() == 0

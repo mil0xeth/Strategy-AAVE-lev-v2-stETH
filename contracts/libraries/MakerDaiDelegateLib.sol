@@ -340,8 +340,13 @@ library MakerDaiDelegateLib {
         wantAmountInitial = Math.min(wantAmountInitial, balanceOfWant());
         //Calculate how much borrowToken to mint to leverage up to targetCollateralizationRatio:
         uint256 flashloanAmount = wantAmountInitial.mul(RAY).div(targetCollateralizationRatio.mul(1e9).sub(RAY));
+        //Retrieve upper max limit of flashloan:
+        uint256 flashloanMaximum = flashmint.maxFlashLoan(address(borrowToken));
+        //Cap flashloan only up to maximum allowed:
+        flashloanAmount = Math.min(flashloanAmount, flashloanMaximum);
         VatLike vat = VatLike(manager.vat());
         uint256 currentDebt = debtForCdp(cdpId, ilk_yieldBearing);
+        //Cap flashloan up to mint ceiling: 
         flashloanAmount = Math.min(flashloanAmount, _forceMintWithinLimits(vat, ilk_yieldBearing, flashloanAmount, currentDebt));
         //Check if amount of dai to borrow is above debtFloor
         if ( (currentDebt.add(flashloanAmount)) <= debtFloor(ilk_yieldBearing).add(1e15)){
@@ -359,7 +364,7 @@ library MakerDaiDelegateLib {
         if (balanceOfCdp(cdpId, ilk_yieldBearing) == 0){
             return;
         }
-        //ask for upper max limit of flashloan:
+        //Retrieve for upper max limit of flashloan:
         uint256 flashloanMaximum = flashmint.maxFlashLoan(address(borrowToken));
         //Paying off the full debt it's common to experience Vat/dust reverts: we circumvent this with add 1 Wei to the amount to be paid
         uint256 flashloanAmount = debtForCdp(cdpId, ilk_yieldBearing).add(1);
@@ -412,7 +417,12 @@ library MakerDaiDelegateLib {
             _swapYieldBearingToWant(balanceOfYieldBearing());
             return;
         }
-
+        //Make sure to always mint enough to repay the flashloan
+        uint256 wantBalance = balanceOfWant();
+        if (flashloanRepayAmount > wantBalance){
+            borrowTokenAmountToMint = Math.max(borrowTokenAmountToMint, flashloanRepayAmount.sub(wantBalance));
+        }
+        
         //Lock collateral and mint dai to repay flashmint
         lockGemAndDraw(
             gemJoinAdapter,

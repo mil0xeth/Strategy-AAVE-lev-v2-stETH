@@ -49,6 +49,7 @@ def test_profit_under_max_ratio_does_not_revert(
 def test_high_loss_causes_healthcheck_revert(
     vault, test_strategy, token, token_whale, gov, healthCheck, yieldBearing
 ):
+    test_strategy.setMaxLossPPM(1000000, {"from": gov})
     healthCheck.setlossLimitRatio(1, {'from': gov})
     lossRatio = healthCheck.lossLimitRatio()
     maxBPS = 10_000

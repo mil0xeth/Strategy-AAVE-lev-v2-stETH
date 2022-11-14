@@ -27,8 +27,9 @@ def test_liquidates_all_if_has_more_want_balance(test_strategy, token, token_wha
 
 
 def test_liquidate_more_than_we_have_should_report_loss(
-    test_strategy, token, token_whale
+    test_strategy, token, token_whale, gov
 ):
+    test_strategy.setMaxLossPPM(1000000, {"from": gov})
     amount = Wei("50 ether")
     token.approve(test_strategy, amount, {"from": token_whale})
     token.transfer(test_strategy, amount, {"from": token_whale})

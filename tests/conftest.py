@@ -163,8 +163,8 @@ def weth_whale(accounts):
 
 @pytest.fixture
 def dai_whale(accounts, dai):
-    #yield accounts.at("0x47ac0fb4f2d84898e4d9e7b4dab3c24507a6d503", force=True)
-    yield accounts.at("0xF977814e90dA44bFA03b6295A0616a897441aceC", force=True)
+    #yield accounts.at("0xF977814e90dA44bFA03b6295A0616a897441aceC", force=True)
+    yield accounts.at("0x5d3a536e4d6dbd6114cc1ead35777bab948e3643", force=True)
 
 @pytest.fixture
 def yvDAI():
@@ -336,6 +336,10 @@ def custom_osm(TestCustomOSM, gov):
 def basefeeChecker():
     basefee = Contract("0xb5e1CAcB567d98faaDB60a1fD4820720141f064F")
     yield basefee
+
+@pytest.fixture
+def maxIL():
+    yield 1000e18
 
 @pytest.fixture
 def strategy(vault, StrategyChoice, gov, osmProxy_want, osmProxy_yieldBearing, cloner, healthCheck):

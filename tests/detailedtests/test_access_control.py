@@ -7,14 +7,15 @@ def test_set_collateralization_ratio_acl(
     strategy.setCollateralizationRatio(200 * 1e18, {"from": gov})
     assert strategy.collateralizationRatio() == 200 * 1e18
 
-    strategy.setCollateralizationRatio(201 * 1e18, {"from": strategist})
-    assert strategy.collateralizationRatio() == 201 * 1e18
+    with reverts("!authorized"):
+        strategy.setCollateralizationRatio(201 * 1e18, {"from": strategist})
+        assert strategy.collateralizationRatio() == 201 * 1e18
 
     strategy.setCollateralizationRatio(202 * 1e18, {"from": management})
     assert strategy.collateralizationRatio() == 202 * 1e18
 
-    strategy.setCollateralizationRatio(203 * 1e18, {"from": guardian})
-    assert strategy.collateralizationRatio() == 203 * 1e18
+    with reverts("!authorized"):
+        strategy.setCollateralizationRatio(203 * 1e18, {"from": guardian})
 
     with reverts("!authorized"):
         strategy.setCollateralizationRatio(200 * 1e18, {"from": user})
@@ -27,48 +28,20 @@ def test_set_rebalance_tolerance_acl(
     assert strategy.lowerRebalanceTolerance() == 5
     assert strategy.upperRebalanceTolerance() == 5
 
-    strategy.setRebalanceTolerance(4, 5, {"from": strategist})
-    assert strategy.lowerRebalanceTolerance() == 4
-    assert strategy.upperRebalanceTolerance() == 5
-
-
+    with reverts("!authorized"):
+        strategy.setRebalanceTolerance(4, 5, {"from": strategist})
+    
     strategy.setRebalanceTolerance(3, 4, {"from": management})
     assert strategy.lowerRebalanceTolerance() == 3
     assert strategy.upperRebalanceTolerance() == 4
 
-    strategy.setRebalanceTolerance(2, 3, {"from": guardian})
-    assert strategy.lowerRebalanceTolerance() == 2
-    assert strategy.upperRebalanceTolerance() == 3
-
+    with reverts("!authorized"):
+        strategy.setRebalanceTolerance(2, 3, {"from": guardian})
+    
     with reverts("!authorized"):
         strategy.setRebalanceTolerance(5, 4, {"from": user})
 
 
-
-def DISABLED_switch_dex_acl(strategy, gov, strategist, management, guardian, user):
-    uniswap = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
-    sushiswap = "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F"
-
-    with reverts("!authorized"):
-        strategy.switchDex(True, {"from": user})
-
-    with reverts("!authorized"):
-        strategy.switchDex(True, {"from": guardian})
-
-    with reverts("!authorized"):
-        strategy.switchDex(True, {"from": strategist})
-
-    strategy.switchDex(True, {"from": management})
-    assert strategy.router() == uniswap
-
-    strategy.switchDex(False, {"from": management})
-    assert strategy.router() == sushiswap
-
-    strategy.switchDex(True, {"from": gov})
-    assert strategy.router() == uniswap
-
-    strategy.switchDex(False, {"from": gov})
-    assert strategy.router() == sushiswap
 
 
 def test_shift_cdp_acl(strategy, gov, strategist, management, guardian, user):

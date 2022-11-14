@@ -10,7 +10,8 @@ def test_prod_migration_scale_down(
     gov,
     RELATIVE_APPROX,
     usdc,
-    accounts
+    accounts,
+    maxIL
 ):
     strategy = Contract("0xAa0Bae32a068C8685160eF8d8003A81b2E13ab2f")
     if (strategy.isActive() == False):
@@ -27,22 +28,26 @@ def test_prod_migration_scale_down(
     new_strategy.shiftToCdp(orig_cdp_id, {"from": gov})
     assert new_strategy.estimatedTotalAssets() == strategy_assets_before 
     assert vault.strategies(new_strategy)["totalDebt"] == strategy_debt_before
+    new_strategy.setHealthCheck(ZERO_ADDRESS, {"from": gov})
 
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18 #there can be small amounts of realized IL
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL #there can be small amounts of realized IL
 
     ## scale strategy down
     vault.updateStrategyDebtRatio(new_strategy, 0, {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     ## scale strategy down
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     ## scale strategy down
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
 def test_prod_migration_scale_up_then_down(
     chain,
@@ -52,7 +57,8 @@ def test_prod_migration_scale_up_then_down(
     gov,
     RELATIVE_APPROX,
     usdc,
-    accounts
+    accounts,
+    maxIL
 ):
     strategy = Contract("0xAa0Bae32a068C8685160eF8d8003A81b2E13ab2f")
     if (strategy.isActive() == False):
@@ -69,6 +75,7 @@ def test_prod_migration_scale_up_then_down(
     new_strategy.shiftToCdp(orig_cdp_id, {"from": gov})
     assert new_strategy.estimatedTotalAssets() == strategy_assets_before 
     assert vault.strategies(new_strategy)["totalDebt"] == strategy_debt_before
+    new_strategy.setHealthCheck(ZERO_ADDRESS, {"from": gov})
 
     ##scale up using guni-0.05% funds from vault:
     guni2 = Contract("0x9E3aeF1fb3dE09b8c46247fa707277b7331406B5")
@@ -77,51 +84,57 @@ def test_prod_migration_scale_up_then_down(
 
     ##give dr to new_strategy:
     vault.updateStrategyDebtRatio(new_strategy, 1090+10000-vault.debtRatio(), {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     ##play around with dr:
     vault.updateStrategyDebtRatio(new_strategy, 1000, {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     vault.updateStrategyDebtRatio(new_strategy, 1000+10000-vault.debtRatio(), {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     vault.updateStrategyDebtRatio(new_strategy, 0, {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
-
-    new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
-
-    new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     new_strategy.setDoHealthCheck(False, {"from": gov})
-    new_strategy.setHealthCheck(ZERO_ADDRESS, {"from": gov})
+    new_strategy.harvest({"from": gov})
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
+
+    new_strategy.setDoHealthCheck(False, {"from": gov})
+    new_strategy.harvest({"from": gov})
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     vault.updateStrategyDebtRatio(new_strategy, 1000, {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     vault.updateStrategyDebtRatio(new_strategy, 0, {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
-
-    new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     new_strategy.setDoHealthCheck(False, {"from": gov})
+    new_strategy.harvest({"from": gov})
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
+
     vault.updateStrategyDebtRatio(new_strategy, 300, {"from": gov})
-    new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
-
     new_strategy.setDoHealthCheck(False, {"from": gov})
-    vault.updateStrategyDebtRatio(new_strategy, 0, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
+
+    vault.updateStrategyDebtRatio(new_strategy, 0, {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
+    new_strategy.harvest({"from": gov})
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
 def test_prod_migration_harvest_scale_up_then_down(
     chain,
@@ -131,7 +144,8 @@ def test_prod_migration_harvest_scale_up_then_down(
     gov,
     RELATIVE_APPROX,
     usdc,
-    accounts
+    accounts,
+    maxIL
 ):
     strategy = Contract("0xAa0Bae32a068C8685160eF8d8003A81b2E13ab2f")
     if (strategy.isActive() == False):
@@ -148,6 +162,7 @@ def test_prod_migration_harvest_scale_up_then_down(
     new_strategy.shiftToCdp(orig_cdp_id, {"from": gov})
     assert new_strategy.estimatedTotalAssets() == strategy_assets_before 
     assert vault.strategies(new_strategy)["totalDebt"] == strategy_debt_before
+    new_strategy.setHealthCheck(ZERO_ADDRESS, {"from": gov})
 
     ##scale up using guni-0.05% funds from vault:
     guni2 = Contract("0x9E3aeF1fb3dE09b8c46247fa707277b7331406B5")
@@ -156,54 +171,71 @@ def test_prod_migration_harvest_scale_up_then_down(
 
     ##give dr to new_strategy:
     vault.updateStrategyDebtRatio(new_strategy, 1090+10000-vault.debtRatio(), {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     ##play around with dr:
     vault.updateStrategyDebtRatio(new_strategy, 1000, {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     vault.updateStrategyDebtRatio(new_strategy, 1000+10000-vault.debtRatio(), {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     vault.updateStrategyDebtRatio(new_strategy, 0, {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.setHealthCheck(ZERO_ADDRESS, {"from": gov})
 
     vault.updateStrategyDebtRatio(new_strategy, 1000, {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     vault.updateStrategyDebtRatio(new_strategy, 0, {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
-
-    new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
-
-    new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     new_strategy.setDoHealthCheck(False, {"from": gov})
+    new_strategy.harvest({"from": gov})
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
+
+    new_strategy.setDoHealthCheck(False, {"from": gov})
+    new_strategy.harvest({"from": gov})
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
+    assert new_strategy.estimatedTotalAssets() == 0
+
     vault.updateStrategyDebtRatio(new_strategy, 300, {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
+
+    vault.updateStrategyDebtRatio(new_strategy, 0, {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
+    new_strategy.harvest({"from": gov})
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     new_strategy.setDoHealthCheck(False, {"from": gov})
-    vault.updateStrategyDebtRatio(new_strategy, 0, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
+    assert new_strategy.estimatedTotalAssets() == 0
+
 
 
 def test_prod_migration_harvest_scale_up_then_profits_then_down(
@@ -216,7 +248,8 @@ def test_prod_migration_harvest_scale_up_then_profits_then_down(
     usdc,
     accounts,
     token_whale,
-    partnerToken
+    partnerToken,
+    maxIL
 ):
     strategy = Contract("0xAa0Bae32a068C8685160eF8d8003A81b2E13ab2f")
     if (strategy.isActive() == False):
@@ -233,6 +266,7 @@ def test_prod_migration_harvest_scale_up_then_profits_then_down(
     new_strategy.shiftToCdp(orig_cdp_id, {"from": gov})
     assert new_strategy.estimatedTotalAssets() == strategy_assets_before 
     assert vault.strategies(new_strategy)["totalDebt"] == strategy_debt_before
+    new_strategy.setHealthCheck(ZERO_ADDRESS, {"from": gov})
 
     ##scale up using guni-0.05% funds from vault:
     guni2 = Contract("0x9E3aeF1fb3dE09b8c46247fa707277b7331406B5")
@@ -241,8 +275,9 @@ def test_prod_migration_harvest_scale_up_then_profits_then_down(
 
     ##give dr to new_strategy:
     vault.updateStrategyDebtRatio(new_strategy, 1090+10000-vault.debtRatio(), {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     #Create profits for UNIV3 DAI<->USDC
     uniswapv3 = Contract("0xE592427A0AEce92De3Edee1F18E0157C05861564")
@@ -252,54 +287,70 @@ def test_prod_migration_harvest_scale_up_then_profits_then_down(
     uniswapv3.exactInputSingle((token, partnerToken, 100, token_whale, 1856589943, uniswapAmount, 0, 0), {"from": token_whale})
     chain.sleep(1)
 
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     ##play around with dr:
     vault.updateStrategyDebtRatio(new_strategy, 1000, {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     vault.updateStrategyDebtRatio(new_strategy, 1000+10000-vault.debtRatio(), {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     vault.updateStrategyDebtRatio(new_strategy, 0, {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.setHealthCheck(ZERO_ADDRESS, {"from": gov})
 
     vault.updateStrategyDebtRatio(new_strategy, 1000, {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     vault.updateStrategyDebtRatio(new_strategy, 0, {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
-
-    new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
-
-    new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     new_strategy.setDoHealthCheck(False, {"from": gov})
+    new_strategy.harvest({"from": gov})
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
+
+    new_strategy.setDoHealthCheck(False, {"from": gov})
+    new_strategy.harvest({"from": gov})
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
+    assert new_strategy.estimatedTotalAssets() == 0
+
     vault.updateStrategyDebtRatio(new_strategy, 300, {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
+
+    vault.updateStrategyDebtRatio(new_strategy, 0, {"from": gov})
+    new_strategy.setDoHealthCheck(False, {"from": gov})
+    new_strategy.harvest({"from": gov})
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
 
     new_strategy.setDoHealthCheck(False, {"from": gov})
-    vault.updateStrategyDebtRatio(new_strategy, 0, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert vault.strategies(new_strategy)["totalLoss"] < 10e18
+    assert vault.strategies(new_strategy)["totalLoss"] < maxIL
+    assert new_strategy.estimatedTotalAssets() == 0
 
 
 
