@@ -8,7 +8,7 @@ def test_vault_ratio_calculation_on_BIGTIME_total_withdraw(
    router, unirouter, dai, dai_whale, token_whale, vault, test_strategy, yieldBearing, token, amountBIGTIME, amountBIGTIME2, user2, user, gov, RELATIVE_APPROX, RELATIVE_APPROX_LOSSY
 ):
     # Initial ratio is 0 because there is no collateral locked
-    assert test_strategy.getCurrentMakerVaultRatio() == 0
+    assert test_strategy.getCurrentCollRatio() == 0
     # Deposit to the vault and send funds through the strategy
     token.approve(vault.address, amountBIGTIME, {"from": user})
     vault.deposit(amountBIGTIME, {"from": user})
@@ -16,7 +16,7 @@ def test_vault_ratio_calculation_on_BIGTIME_total_withdraw(
     test_strategy.harvest({"from": gov})
 
     # Collateral ratio should be the target ratio set
-    assert ( pytest.approx(test_strategy.getCurrentMakerVaultRatio(), rel=RELATIVE_APPROX) == test_strategy.collateralizationRatio())
+    assert ( pytest.approx(test_strategy.getCurrentCollRatio(), rel=RELATIVE_APPROX) == test_strategy.collateralizationRatio())
 
 
     # Withdraw 100% of the assets, with 0.1% maxLoss
@@ -31,7 +31,7 @@ def test_vault_ratio_calculation_on_BIGTIME_total_withdraw(
     chain.sleep(1)
     test_strategy.harvest({"from": gov})
 
-    assert ( pytest.approx(test_strategy.getCurrentMakerVaultRatio(), rel=RELATIVE_APPROX) == test_strategy.collateralizationRatio())
+    assert ( pytest.approx(test_strategy.getCurrentCollRatio(), rel=RELATIVE_APPROX) == test_strategy.collateralizationRatio())
 
 
     # Withdraw 100% of the assets, with 0.1% maxLoss
@@ -47,7 +47,7 @@ def test_vault_ratio_calculation_on_BIGTIME_total_withdraw(
     test_strategy.harvest({"from": gov})
 
     # Collateral ratio should be the target ratio set
-    assert ( pytest.approx(test_strategy.getCurrentMakerVaultRatio(), rel=RELATIVE_APPROX) == test_strategy.collateralizationRatio())
+    assert ( pytest.approx(test_strategy.getCurrentCollRatio(), rel=RELATIVE_APPROX) == test_strategy.collateralizationRatio())
 
 
     # Withdraw 100% of the assets, with 0.1% maxLoss
@@ -55,11 +55,11 @@ def test_vault_ratio_calculation_on_BIGTIME_total_withdraw(
     test_strategy.harvest({"from": gov})
 
     # Strategy should restore collateralization ratio to target value on withdraw
-    assert (pytest.approx(test_strategy.collateralizationRatio(), rel=0.16) == test_strategy.getCurrentMakerVaultRatio())
+    assert (pytest.approx(test_strategy.collateralizationRatio(), rel=0.16) == test_strategy.getCurrentCollRatio())
 
     #assert token.balanceOf(test_strategy) < 1e18
     assert yieldBearing.balanceOf(test_strategy) < 2e18
-    #assert test_strategy.balanceOfMakerVault() == 0
+    #assert test_strategy.balanceOfCollateral() == 0
     #assert test_strategy.balanceOfDebt() == 0
 
     #REPEAT!
@@ -70,7 +70,7 @@ def test_vault_ratio_calculation_on_BIGTIME_total_withdraw(
     test_strategy.harvest({"from": gov})
 
     # Collateral ratio should be the target ratio set
-    assert ( pytest.approx(test_strategy.getCurrentMakerVaultRatio(), rel=RELATIVE_APPROX) == test_strategy.collateralizationRatio())
+    assert ( pytest.approx(test_strategy.getCurrentCollRatio(), rel=RELATIVE_APPROX) == test_strategy.collateralizationRatio())
 
     # Withdraw 100% of the assets, with 0.1% maxLoss
     withdraw_tx = vault.withdraw(amountBIGTIME*0.1, user, 1000, {"from": user})
@@ -90,7 +90,7 @@ def test_vault_ratio_calculation_on_BIGTIME_total_withdraw2(
    router, unirouter, dai, dai_whale, token_whale, vault,  test_strategy,  yieldBearing, token, amountBIGTIME, amountBIGTIME2, user2, user, gov, RELATIVE_APPROX, RELATIVE_APPROX_LOSSY
 ):
     # Initial ratio is 0 because there is no collateral locked
-    assert test_strategy.getCurrentMakerVaultRatio() == 0
+    assert test_strategy.getCurrentCollRatio() == 0
     # Deposit to the vault and send funds through the strategy
     token.approve(vault.address, amountBIGTIME, {"from": user})
     vault.deposit(amountBIGTIME, {"from": user})
@@ -98,7 +98,7 @@ def test_vault_ratio_calculation_on_BIGTIME_total_withdraw2(
     test_strategy.harvest({"from": gov})
 
     # Collateral ratio should be the target ratio set
-    assert ( pytest.approx(test_strategy.getCurrentMakerVaultRatio(), rel=RELATIVE_APPROX) == test_strategy.collateralizationRatio())
+    assert ( pytest.approx(test_strategy.getCurrentCollRatio(), rel=RELATIVE_APPROX) == test_strategy.collateralizationRatio())
 
     # Withdraw 100% of the assets, with 0.1% maxLoss
     withdraw_tx = vault.withdraw(amountBIGTIME, user, 1000, {"from": user})
@@ -118,7 +118,7 @@ def test_vault_ratio_calculation_on_BIGTIME_total_withdraw2(
     test_strategy.harvest({"from": gov})
 
     # Collateral ratio should be the target ratio set
-    assert ( pytest.approx(test_strategy.getCurrentMakerVaultRatio(), rel=RELATIVE_APPROX) == test_strategy.collateralizationRatio())
+    assert ( pytest.approx(test_strategy.getCurrentCollRatio(), rel=RELATIVE_APPROX) == test_strategy.collateralizationRatio())
 
 
     # Withdraw 100% of the assets, with 0.1% maxLoss
@@ -137,7 +137,7 @@ def test_vault_ratio_calculation_on_BIGTIME_total_withdraw2(
     test_strategy.harvest({"from": gov})
 
     # Collateral ratio should be the target ratio set
-    assert ( pytest.approx(test_strategy.getCurrentMakerVaultRatio(), rel=RELATIVE_APPROX) == test_strategy.collateralizationRatio())
+    assert ( pytest.approx(test_strategy.getCurrentCollRatio(), rel=RELATIVE_APPROX) == test_strategy.collateralizationRatio())
 
 
     # Withdraw 100% of the assets, with 0.1% maxLoss
@@ -156,13 +156,13 @@ def test_vault_ratio_calculation_on_BIGTIME_total_withdraw2(
     test_strategy.harvest({"from": gov})
 
     # Collateral ratio should be the target ratio set
-    assert ( pytest.approx(test_strategy.getCurrentMakerVaultRatio(), rel=RELATIVE_APPROX) == test_strategy.collateralizationRatio())
+    assert ( pytest.approx(test_strategy.getCurrentCollRatio(), rel=RELATIVE_APPROX) == test_strategy.collateralizationRatio())
 
 
     # Withdraw 100% of the assets, with 0.1% maxLoss
     withdraw_tx = vault.withdraw(amountBIGTIME*0.1, user, 1000, {"from": user})
     test_strategy.harvest({"from": gov})
-    assert ( pytest.approx(test_strategy.getCurrentMakerVaultRatio(), rel=RELATIVE_APPROX) == 0)
+    assert ( pytest.approx(test_strategy.getCurrentCollRatio(), rel=RELATIVE_APPROX) == 0)
     assert vault.totalDebt() == 0
     assert vault.totalAssets() == 0
     assert test_strategy.estimatedTotalAssets() == 0
@@ -218,7 +218,7 @@ def test_higher_target_ratio_should_repay_debt(
     tend_tx = strategy.tend({"from": gov})
 
     # Strategy should restore collateralization ratio to target value on withdraw
-    assert (pytest.approx(test_strategy.collateralizationRatio(), rel=RELATIVE_APPROX) == test_strategy.getCurrentMakerVaultRatio())
+    assert (pytest.approx(test_strategy.collateralizationRatio(), rel=RELATIVE_APPROX) == test_strategy.getCurrentCollRatio())
 
 def test_higher_target_ratio_should_repay_debt(
     vault, strategy, token, amount, user, gov, RELATIVE_APPROX
@@ -269,7 +269,7 @@ def test_higher_ratio_inside_rebalancing_band_should_not_repay_debt(
     test_strategy.tend({"from": gov})
 
     # Strategy should restore collateralization ratio to target value on withdraw
-    assert (pytest.approx(test_strategy.collateralizationRatio(), rel=RELATIVE_APPROX) != test_strategy.getCurrentMakerVaultRatio())
+    assert (pytest.approx(test_strategy.collateralizationRatio(), rel=RELATIVE_APPROX) != test_strategy.getCurrentCollRatio())
 
 def test_higher_ratio_inside_rebalancing_band_should_not_repay_debt(
     vault, test_strategy, token, amount, user, gov, RELATIVE_APPROX
@@ -283,7 +283,7 @@ def test_higher_ratio_inside_rebalancing_band_should_not_repay_debt(
     test_strategy.harvest({"from": gov})
 
 
-    new_ratio = ( test_strategy.getCurrentMakerVaultRatio() + test_strategy.upperRebalanceTolerance() )
+    new_ratio = ( test_strategy.getCurrentCollRatio() + test_strategy.upperRebalanceTolerance() )
     test_strategy.setCollateralizationRatio(new_ratio, {"from": gov})
 
     assert test_strategy.tendTrigger(1) == False
@@ -292,14 +292,14 @@ def test_higher_ratio_inside_rebalancing_band_should_not_repay_debt(
     test_strategy.tend({"from": gov})
 
     # Strategy should restore collateralization ratio to target value on withdraw
-    assert (pytest.approx(test_strategy.collateralizationRatio(), rel=RELATIVE_APPROX) != test_strategy.getCurrentMakerVaultRatio())
+    assert (pytest.approx(test_strategy.collateralizationRatio(), rel=RELATIVE_APPROX) != test_strategy.getCurrentCollRatio())
 
 
 def test_vault_ratio_calculation_on_withdraw(
    vault,  test_strategy, token, amount, user, gov, RELATIVE_APPROX, RELATIVE_APPROX_LOSSY
 ):
     # Initial ratio is 0 because there is no collateral locked
-    assert test_strategy.getCurrentMakerVaultRatio() == 0
+    assert test_strategy.getCurrentCollRatio() == 0
 
     # Deposit to the vault and send funds through the strategy
     token.approve(vault.address, amount, {"from": user})
@@ -309,7 +309,7 @@ def test_vault_ratio_calculation_on_withdraw(
 
     # Collateral ratio should be the target ratio set
     assert (
-        pytest.approx(test_strategy.getCurrentMakerVaultRatio(), rel=RELATIVE_APPROX)
+        pytest.approx(test_strategy.getCurrentCollRatio(), rel=RELATIVE_APPROX)
         == test_strategy.collateralizationRatio()
     )
 
@@ -320,7 +320,7 @@ def test_vault_ratio_calculation_on_withdraw(
     test_strategy.tend({'from': gov})
 
     # Strategy should restore collateralization ratio to target value on withdraw
-    assert (pytest.approx(test_strategy.collateralizationRatio(), rel=RELATIVE_APPROX) == test_strategy.getCurrentMakerVaultRatio())
+    assert (pytest.approx(test_strategy.collateralizationRatio(), rel=RELATIVE_APPROX) == test_strategy.getCurrentCollRatio())
 
 
 
@@ -328,7 +328,7 @@ def test_vault_ratio_calculation_on_very_low_withdraw(
     vault, test_strategy, token, amount, user, gov, RELATIVE_APPROX, RELATIVE_APPROX_LOSSY
 ):
     # Initial ratio is 0 because there is no collateral locked
-    assert test_strategy.getCurrentMakerVaultRatio() == 0
+    assert test_strategy.getCurrentCollRatio() == 0
 
     # Deposit to the vault and send funds through the strategy
     token.approve(vault.address, amount, {"from": user})
@@ -337,7 +337,7 @@ def test_vault_ratio_calculation_on_very_low_withdraw(
     test_strategy.harvest({"from": gov})
 
     # Collateral ratio should be the target ratio set
-    assert (pytest.approx(test_strategy.getCurrentMakerVaultRatio(), rel=RELATIVE_APPROX) == test_strategy.collateralizationRatio())
+    assert (pytest.approx(test_strategy.getCurrentCollRatio(), rel=RELATIVE_APPROX) == test_strategy.collateralizationRatio())
 
  
     # Withdraw 0.1% of the assets
@@ -346,7 +346,7 @@ def test_vault_ratio_calculation_on_very_low_withdraw(
     test_strategy.tend({'from': gov})
 
     # Strategy should restore collateralization ratio to target value on withdraw
-    assert (pytest.approx(test_strategy.collateralizationRatio(), rel=RELATIVE_APPROX) == test_strategy.getCurrentMakerVaultRatio())
+    assert (pytest.approx(test_strategy.collateralizationRatio(), rel=RELATIVE_APPROX) == test_strategy.getCurrentCollRatio())
 
 
 
@@ -354,7 +354,7 @@ def test_vault_ratio_calculation_on_high_withdraw(
     vault,  test_strategy, token,  amount, user, gov, RELATIVE_APPROX, RELATIVE_APPROX_LOSSY
 ):
     # Initial ratio is 0 because there is no collateral locked
-    assert test_strategy.getCurrentMakerVaultRatio() == 0
+    assert test_strategy.getCurrentCollRatio() == 0
 
     # Deposit to the vault and send funds through the strategy
     token.approve(vault.address, amount, {"from": user})
@@ -364,7 +364,7 @@ def test_vault_ratio_calculation_on_high_withdraw(
 
     # Collateral ratio should be the target ratio set
     assert (
-        pytest.approx(test_strategy.getCurrentMakerVaultRatio(), rel=RELATIVE_APPROX)
+        pytest.approx(test_strategy.getCurrentCollRatio(), rel=RELATIVE_APPROX)
         == test_strategy.collateralizationRatio()
     )
 
@@ -375,7 +375,7 @@ def test_vault_ratio_calculation_on_high_withdraw(
     # Strategy should restore collateralization ratio to target value on withdraw
     assert (
         pytest.approx(test_strategy.collateralizationRatio(), rel=RELATIVE_APPROX)
-        == test_strategy.getCurrentMakerVaultRatio()
+        == test_strategy.getCurrentCollRatio()
     )
 
 
@@ -383,7 +383,7 @@ def test_vault_ratio_calculation_on_very_high_withdraw(
     yieldBearing,dai, dai_whale, vault, test_strategy, token, amount, user, gov, RELATIVE_APPROX, RELATIVE_APPROX_LOSSY
 ):
     # Initial ratio is 0 because there is no collateral locked
-    assert test_strategy.getCurrentMakerVaultRatio() == 0
+    assert test_strategy.getCurrentCollRatio() == 0
 
     # Deposit to the vault and send funds through the strategy
     token.approve(vault.address, amount, {"from": user})
@@ -393,7 +393,7 @@ def test_vault_ratio_calculation_on_very_high_withdraw(
 
     # Collateral ratio should be the target ratio set
     assert (
-        pytest.approx(test_strategy.getCurrentMakerVaultRatio(), rel=RELATIVE_APPROX)
+        pytest.approx(test_strategy.getCurrentCollRatio(), rel=RELATIVE_APPROX)
         == test_strategy.collateralizationRatio()
     )
 
@@ -403,14 +403,14 @@ def test_vault_ratio_calculation_on_very_high_withdraw(
     test_strategy.tend({'from': gov})
 
     # Strategy should restore collateralization ratio to target value on withdraw
-    assert (pytest.approx(test_strategy.collateralizationRatio(), rel=0.16) == test_strategy.getCurrentMakerVaultRatio())
+    assert (pytest.approx(test_strategy.collateralizationRatio(), rel=0.16) == test_strategy.getCurrentCollRatio())
 
 
 def test_vault_ratio_calculation_on_almost_total_withdraw(
     yieldBearing,dai, dai_whale, vault, router,  test_strategy, token, amount, user, gov, RELATIVE_APPROX, RELATIVE_APPROX_LOSSY
 ):
     # Initial ratio is 0 because there is no collateral locked
-    assert test_strategy.getCurrentMakerVaultRatio() == 0
+    assert test_strategy.getCurrentCollRatio() == 0
 
     # Deposit to the vault and send funds through the strategy
     token.approve(vault.address, amount, {"from": user})
@@ -420,7 +420,7 @@ def test_vault_ratio_calculation_on_almost_total_withdraw(
 
     # Collateral ratio should be the target ratio set
     assert (
-        pytest.approx(test_strategy.getCurrentMakerVaultRatio(), rel=RELATIVE_APPROX)
+        pytest.approx(test_strategy.getCurrentCollRatio(), rel=RELATIVE_APPROX)
         == test_strategy.collateralizationRatio()
     )
 
@@ -429,14 +429,14 @@ def test_vault_ratio_calculation_on_almost_total_withdraw(
     test_strategy.tend({'from': gov})
 
     # Strategy should restore collateralization ratio to target value on withdraw
-    assert (pytest.approx(test_strategy.collateralizationRatio(), rel=RELATIVE_APPROX) != test_strategy.getCurrentMakerVaultRatio())
+    assert (pytest.approx(test_strategy.collateralizationRatio(), rel=RELATIVE_APPROX) != test_strategy.getCurrentCollRatio())
 
 
 def test_vault_ratio_calculation_on_total_withdraw(
     yieldBearing,dai, dai_whale, token_whale, vault, test_strategy, token, amount, user, gov, RELATIVE_APPROX, RELATIVE_APPROX_LOSSY
 ):
     # Initial ratio is 0 because there is no collateral locked
-    assert test_strategy.getCurrentMakerVaultRatio() == 0
+    assert test_strategy.getCurrentCollRatio() == 0
     # Deposit to the vault and send funds through the strategy
     token.approve(vault.address, amount, {"from": user})
     vault.deposit(amount, {"from": user})
@@ -445,7 +445,7 @@ def test_vault_ratio_calculation_on_total_withdraw(
 
     # Collateral ratio should be the target ratio set
     assert (
-        pytest.approx(test_strategy.getCurrentMakerVaultRatio(), rel=RELATIVE_APPROX)
+        pytest.approx(test_strategy.getCurrentCollRatio(), rel=RELATIVE_APPROX)
         == test_strategy.collateralizationRatio()
     )
 
@@ -456,7 +456,7 @@ def test_vault_ratio_calculation_on_total_withdraw(
     # Strategy should have 0 collateralization ratio to target value on withdraw
     assert (
         pytest.approx(0, rel=RELATIVE_APPROX)
-        == test_strategy.getCurrentMakerVaultRatio()
+        == test_strategy.getCurrentCollRatio()
     )
 
     assert vault.totalDebt() == 0
@@ -468,7 +468,7 @@ def test_vault_ratio_calculation_on_sandwiched_total_withdraw(
     yieldBearing,token_whale, vault,  test_strategy, token,  amount, user, gov, RELATIVE_APPROX, RELATIVE_APPROX_LOSSY
 ):
     # Initial ratio is 0 because there is no collateral locked
-    assert test_strategy.getCurrentMakerVaultRatio() == 0
+    assert test_strategy.getCurrentCollRatio() == 0
     #sandwich:
     sandwich = "1000 ether"
     token.approve(vault.address, sandwich, {"from": token_whale})
@@ -481,7 +481,7 @@ def test_vault_ratio_calculation_on_sandwiched_total_withdraw(
     test_strategy.harvest({"from": gov})
     withdraw_tx = vault.withdraw(vault.balanceOf(token_whale)*0.3, token_whale, 10000, {"from": token_whale})
     # Strategy should restore collateralization ratio to target value on withdraw
-    assert (pytest.approx(test_strategy.collateralizationRatio(), rel=RELATIVE_APPROX) != test_strategy.getCurrentMakerVaultRatio())
+    assert (pytest.approx(test_strategy.collateralizationRatio(), rel=RELATIVE_APPROX) != test_strategy.getCurrentCollRatio())
 
     # Withdraw 100% of the assets, with 0.1% maxLoss
     withdraw_tx = vault.withdraw(amount, user, 1000, {"from": user})

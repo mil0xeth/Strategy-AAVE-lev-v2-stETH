@@ -43,16 +43,8 @@ def test_detailed_migration(
     )
 
     vault.migrateStrategy(strategy, new_strategy, {"from": gov})
-
-    orig_cdp_id = strategy.cdpId()
-    new_strategy.shiftToCdp(orig_cdp_id, {"from": gov})
     new_strategy.harvest({"from": gov})
 
     assert new_strategy.balanceOfDebt() > amount
     assert (pytest.approx(new_strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX_LOSSY) == amount )
-    assert new_strategy.cdpId() == orig_cdp_id
     assert vault.strategies(new_strategy).dict()["totalDebt"] == amount
-
-    #Old strategy should have relinquished ownership of the CDP
-    #with reverts("cdp-not-allowed"):
-    #    strategy.shiftToCdp(orig_cdp_id, {"from": gov})

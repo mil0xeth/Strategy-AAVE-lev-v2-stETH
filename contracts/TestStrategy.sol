@@ -47,12 +47,7 @@ contract TestStrategy is Strategy {
     }
 
     function freeCollateral(uint256 collateralAmount, uint256 daiAmount) public {
-        _checkAllowance(
-            MakerDaiDelegateLib.daiJoinAddress(),
-            address(borrowToken),
-            daiAmount
-        );
-        return MakerDaiDelegateLib.wipeAndFreeGem(gemJoinAdapter, cdpId, collateralAmount, daiAmount);
+        return MakerDaiDelegateLib._withdrawCollateral(collateralAmount);
     }
 /*
     function repayDebt(uint256 _amount) public {

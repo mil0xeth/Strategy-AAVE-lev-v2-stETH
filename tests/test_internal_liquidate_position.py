@@ -102,7 +102,7 @@ def test_happy_liquidation(
     assert _liquidatedAmount > amount-1e18
     assert test_strategy.estimatedTotalAssets() > 0
     assert test_strategy.balanceOfDebt() == 0
-    assert test_strategy.balanceOfMakerVault() == 0
+    assert test_strategy.balanceOfCollateral() == 0
 
     #take back to vault:
     vault.updateStrategyDebtRatio(test_strategy, 0, {"from": gov})

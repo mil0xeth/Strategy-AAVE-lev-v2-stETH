@@ -61,9 +61,9 @@ def test_high_loss_causes_healthcheck_revert(
     test_strategy.harvest({"from": gov})
 
     # Unlock part of the collateral
-    #test_strategy.freeCollateral(test_strategy.balanceOfMakerVault() * (0.5 + ((lossRatio + 1) / maxBPS)), 0)
+    #test_strategy.freeCollateral(test_strategy.balanceOfCollateral() * (0.5 + ((lossRatio + 1) / maxBPS)), 0)
     lowestCollateralizationRatio = 1020000000000000001
-    test_strategy.freeCollateral(test_strategy.balanceOfMakerVault()*(test_strategy.getCurrentMakerVaultRatio()-lowestCollateralizationRatio)/test_strategy.getCurrentMakerVaultRatio(), 0, {"from": gov})
+    test_strategy.freeCollateral(test_strategy.balanceOfCollateral()*(test_strategy.getCurrentCollRatio()-lowestCollateralizationRatio)/test_strategy.getCurrentCollRatio(), 0, {"from": gov})
 
     # Simulate loss by transferring away unlocked collateral
     token.transfer(token_whale, token.balanceOf(test_strategy), {"from": test_strategy})

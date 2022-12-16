@@ -10,33 +10,45 @@ import "../interfaces/yearn/IBaseFee.sol";
 import "../interfaces/yearn/IVault.sol";
 import "../interfaces/GUNI/GUniPool.sol";
 
+import "../interfaces/aave/ILendingPool.sol";
+import "../interfaces/aave/IProtocolDataProvider.sol";
+import "../../interfaces/aave/IPriceOracle.sol";
+//import "../interfaces/aave/IAaveIncentivesController.sol";
+//import "../interfaces/aave/IStakedAave.sol";
+import "../interfaces/aave/IAToken.sol";
+import "../interfaces/aave/IVariableDebtToken.sol";
+
+
 contract Strategy is BaseStrategy {
     using Address for address;
-
     enum Action {WIND, UNWIND}
 
-    //GUNIDAIUSDC1 - Gelato Uniswap DAI/USDC LP - 0.05% fee
-    //GUniPool internal constant yieldBearing = GUniPool(0xAbDDAfB225e10B90D798bB8A886238Fb835e2053);
-    //bytes32 internal constant ilk_yieldBearing = 0x47554e49563344414955534443312d4100000000000000000000000000000000;
-    //address internal constant gemJoinAdapter = 0xbFD445A97e7459b0eBb34cfbd3245750Dba4d7a4;
-    
     //GUNIDAIUSDC2 - Gelato Uniswap DAI/USDC2 LP 2 - 0.01% fee
     GUniPool internal constant yieldBearing = GUniPool(0x50379f632ca68D36E50cfBC8F78fe16bd1499d1e);
-    bytes32 internal constant ilk_yieldBearing = 0x47554e49563344414955534443322d4100000000000000000000000000000000;
-    address internal constant gemJoinAdapter = 0xA7e4dDde3cBcEf122851A7C8F7A55f23c0Daf335;
+    //DAI borrowToken:
+    IERC20 internal constant borrowToken = IERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+
+    //AAVEV2 lending pool:
+    //ILendingPool private constant lendingPool = ILendingPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
+    //IProtocolDataProvider private constant protocolDataProvider = IProtocolDataProvider(0x057835Ad21a177dbdd3090bB1CAE03EaCF78Fc6d);
+    //AAVEV2 AMM lending pool:
+    ILendingPool private constant lendingPool = ILendingPool(0x7937D4799803FbBe595ed57278Bc4cA21f3bFfCB);
+    IProtocolDataProvider private constant protocolDataProvider = IProtocolDataProvider(0xc443AD9DDE3cecfB9dfC5736578f447aFE3590ba);
+
+    IPriceOracle private constant priceOracle = IPriceOracle(0xA50ba011c48153De246E5192C8f9258A2ba79Ca9);
+    uint16 private constant referral = 7; // Yearn's aave referral code
+
+    // Supply and borrow tokens
+    IAToken public aToken;
+    IVariableDebtToken public debtToken;
 
     //Flashmint:
     address internal constant flashmint = 0x1EB4CF3A948E7D72A198fe073cCb8C7a948cD853;
-
-    IERC20 internal constant borrowToken = IERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
 
     //----------- MAKER INIT    
     // Units used in Maker contracts
     uint256 internal constant WAD = 10**18;
     uint256 internal constant RAY = 10**27;
-
-    // maker vault identifier
-    uint256 public cdpId;
 
     //Desired collaterization ratio
     //Directly affects the leverage multiplier for every investment to leverage up the Maker vault with yieldBearing: 
@@ -57,9 +69,6 @@ contract Strategy is BaseStrategy {
 
     //Expected flashmint fee:
     uint256 public expectedFlashmintFee;
-
-    //Maximum Loss allowed in parts per million when liquidating (e.g. from Impermanent Loss):
-    uint256 public maxLossPPM;
 
     // Name of the strategy
     string internal strategyName;
@@ -96,10 +105,8 @@ contract Strategy is BaseStrategy {
         //10M$ dai or usdc maximum trade
         maxSingleTrade = 5_000_000 * 1e18;
         //10M$ dai or usdc maximum trade
-        minSingleTrade = 1 * 1e17;
-
-        //maxLossPPM: maxLoss in parts per millin of total strategy assets:
-        maxLossPPM = 400; //1 = 0.0001%, 100 = 0.01% = 1 bp
+        //minSingleTrade = 1 * 1e17;
+        minSingleTrade = 1 * 1e10;
 
         creditThreshold = 1e6 * 1e18;
         maxReportDelay = 21 days; // 21 days in seconds, if we hit this then harvestTrigger = True
@@ -107,16 +114,30 @@ contract Strategy is BaseStrategy {
         // Set health check to health.ychad.eth
         healthCheck = 0xDDCea799fF1699e98EDF118e0629A974Df7DF012;
 
-        cdpId = MakerDaiDelegateLib.openCdp(ilk_yieldBearing);
-        require(cdpId > 0); // dev: error opening cdp
-
         // Current ratio can drift
-        // Allow additional 0.002 = 0.2% in any direction by default ==> 102.5% upper, 102.1% lower
-        upperRebalanceTolerance = (20 * WAD) / 10000;
-        lowerRebalanceTolerance = (20 * WAD) / 10000;
+        // Allow additional 20 BPS = 0.002 = 0.2% in any direction by default ==> 102.5% upper, 102.1% lower
+        upperRebalanceTolerance = (500 * WAD) / 10000;
+        lowerRebalanceTolerance = (500 * WAD) / 10000;
 
-        // Minimum collateralization ratio for GUNIV3DAIUSDC is 102.3% == 10230
-        collateralizationRatio = (10230 * WAD) / 10000;
+        // Minimum collateralization ratio for GUNIV3DAIUSDC is 102.3% == 10230 BPS
+        //collateralizationRatio = (10230 * WAD) / 10000;
+        collateralizationRatio = (20000 * WAD) / 10000;
+
+        // Set aave tokens
+        //(address _aToken, , address _debtToken) = protocolDataProvider.getReserveTokensAddresses(address(yieldBearing));
+        (address _aToken, , ) = protocolDataProvider.getReserveTokensAddresses(address(yieldBearing));
+        ( , , address _debtToken) = protocolDataProvider.getReserveTokensAddresses(address(borrowToken));
+        aToken = IAToken(_aToken);
+        debtToken = IVariableDebtToken(_debtToken);
+
+        // Let collateral targets
+        //(uint256 ltv, uint256 liquidationThreshold) = getProtocolCollatRatios(address(want));
+        //targetCollatRatio = liquidationThreshold.sub(DEFAULT_COLLAT_TARGET_MARGIN);
+        //maxCollatRatio = liquidationThreshold.sub(DEFAULT_COLLAT_MAX_MARGIN);
+        //maxBorrowCollatRatio = ltv.sub(DEFAULT_COLLAT_MAX_MARGIN);
+        //(uint256 daiLtv, ) = getProtocolCollatRatios(dai);
+        //daiBorrowCollatRatio = daiLtv.sub(DEFAULT_COLLAT_MAX_MARGIN);
+        //DECIMALS = 10**vault.decimals();
 
     }
 
@@ -147,16 +168,12 @@ contract Strategy is BaseStrategy {
         expectedFlashmintFee = _expectedFlashmintFee;
     }
 
-    function setMaxLossPPM(uint256 _maxLossPPM) external onlyVaultManagers {
-        maxLossPPM = _maxLossPPM; 
-    }
-
     // Target collateralization ratio to maintain within bounds
     function setCollateralizationRatio(uint256 _collateralizationRatio)
         external
         onlyVaultManagers
     {
-        require(_collateralizationRatio.sub(lowerRebalanceTolerance) > MakerDaiDelegateLib.getLiquidationRatio(ilk_yieldBearing).mul(WAD).div(RAY)); // dev: desired collateralization ratio is too low
+        require(_collateralizationRatio.sub(lowerRebalanceTolerance) > MakerDaiDelegateLib.getLiquidationRatio().mul(WAD).div(RAY)); // dev: desired collateralization ratio is too low
         collateralizationRatio = _collateralizationRatio;
     }
 
@@ -165,24 +182,9 @@ contract Strategy is BaseStrategy {
         external
         onlyVaultManagers
     {
-        require(collateralizationRatio.sub(_lowerRebalanceTolerance) > MakerDaiDelegateLib.getLiquidationRatio(ilk_yieldBearing).mul(WAD).div(RAY)); // dev: desired rebalance tolerance makes allowed ratio too low
+        require(collateralizationRatio.sub(_lowerRebalanceTolerance) > MakerDaiDelegateLib.getLiquidationRatio().mul(WAD).div(RAY)); // dev: desired rebalance tolerance makes allowed ratio too low
         lowerRebalanceTolerance = _lowerRebalanceTolerance;
         upperRebalanceTolerance = _upperRebalanceTolerance;
-    }
-
-    // Required to move funds to a new cdp and use a different cdpId after migration
-    // Should only be called by governance as it will move funds
-    function shiftToCdp(uint256 newCdpId) external onlyGovernance {
-        MakerDaiDelegateLib.shiftCdp(cdpId, newCdpId);
-        cdpId = newCdpId;
-    }
-
-    // Allow address to manage Maker's CDP
-    function grantCdpManagingRightsToUser(address user, bool allow)
-        external
-        onlyGovernance
-    {
-        MakerDaiDelegateLib.allowManagingCdp(cdpId, user, allow);
     }
 
     // Allow external debt repayment & direct repayment of debt with collateral (price oracle independent)
@@ -191,22 +193,21 @@ contract Strategy is BaseStrategy {
         onlyVaultManagers
     {
         uint256 wantBalance = balanceOfWant();
-        wantBalance = Math.min(wantBalance, balanceOfDebt().add(1)); //Paying off the full debt it's common to experience Vat/dust reverts: we circumvent this with add 1 Wei to the amount to be paid
-        _checkAllowance(MakerDaiDelegateLib.daiJoinAddress(), address(want), wantBalance);
-        repayAmountOfCollateral = Math.min(repayAmountOfCollateral, balanceOfMakerVault());
+        wantBalance = Math.min(wantBalance, balanceOfDebt());
+        repayAmountOfCollateral = Math.min(repayAmountOfCollateral, balanceOfCollateral());
         //free collateral and pay down debt with free want:
-        MakerDaiDelegateLib.wipeAndFreeGem(gemJoinAdapter, cdpId, repayAmountOfCollateral, wantBalance);
+        MakerDaiDelegateLib.repayBorrowToken(wantBalance);
+        MakerDaiDelegateLib.withdrawCollateral(repayAmountOfCollateral);
         //Desired collateral amount unlocked --> swap to want
-        MakerDaiDelegateLib._swapYieldBearingToWant(repayAmountOfCollateral);
+        MakerDaiDelegateLib.swapYieldBearingToWant(repayAmountOfCollateral);
         //Pay down debt with freed collateral that was swapped to want:
         wantBalance = balanceOfWant();
-        wantBalance = Math.min(wantBalance, balanceOfDebt().add(1));
-        _checkAllowance(MakerDaiDelegateLib.daiJoinAddress(), address(want), wantBalance);
-        MakerDaiDelegateLib.wipeAndFreeGem(gemJoinAdapter, cdpId, 0, wantBalance);
+        wantBalance = Math.min(wantBalance, balanceOfDebt());
+        MakerDaiDelegateLib.repayBorrowToken(wantBalance);
         //If all debt is paid down, free all collateral and swap to want:
         if (balanceOfDebt() == 0){
-            MakerDaiDelegateLib.wipeAndFreeGem(gemJoinAdapter, cdpId, balanceOfMakerVault(), 0);    
-            MakerDaiDelegateLib._swapYieldBearingToWant(balanceOfYieldBearing());
+            MakerDaiDelegateLib.withdrawCollateral(balanceOfCollateral());
+            MakerDaiDelegateLib.swapYieldBearingToWant(balanceOfYieldBearing());
         }
     }
 
@@ -214,7 +215,7 @@ contract Strategy is BaseStrategy {
         external
         onlyVaultManagers
     {
-        MakerDaiDelegateLib.unwind(repayAmountOfWant, getCurrentMakerVaultRatio(), cdpId);
+        MakerDaiDelegateLib.unwind(repayAmountOfWant, getCurrentCollRatio(), address(aToken), address(debtToken));
     }
 
     // ******** OVERRIDEN METHODS FROM BASE CONTRACT ************
@@ -226,7 +227,7 @@ contract Strategy is BaseStrategy {
     function estimatedTotalAssets() public view override returns (uint256) {  //measured in WANT
         return  
                 balanceOfWant() //free WANT balance in wallet
-                .add(balanceOfYieldBearing().add(balanceOfMakerVault()).mul(getWantPerYieldBearing()).div(WAD))
+                .add(balanceOfYieldBearing().add(balanceOfCollateral()).mul(getWantPerYieldBearing()).div(WAD))
                 .sub(balanceOfDebt());
     }
 
@@ -262,30 +263,28 @@ contract Strategy is BaseStrategy {
     }
 
     function adjustPosition(uint256 _debtOutstanding) internal override {
-        // Update accumulated stability fees,  Update the debt ceiling using DSS Auto Line
-        MakerDaiDelegateLib.keepBasicMakerHygiene(ilk_yieldBearing);
-        // If we have enough want to convert and deposit more into the maker vault, we do it
-        //Here minSingleTrade represents the minimum investment of want that makes it worth it to loop 
+        // If we have enough want to convert and deposit more into aave, we do it
+        // Here minSingleTrade represents the minimum investment of want that makes it worth it to loop 
         if (balanceOfWant() > _debtOutstanding.add(minSingleTrade) ) {
-            MakerDaiDelegateLib.wind(Math.min(maxSingleTrade, balanceOfWant().sub(_debtOutstanding)), collateralizationRatio, cdpId);
+            MakerDaiDelegateLib.wind(Math.min(maxSingleTrade, balanceOfWant().sub(_debtOutstanding)), collateralizationRatio, address(debtToken));
         } else {
             //Check if collateralizationRatio needs adjusting
             // Allow the ratio to move a bit in either direction to avoid cycles
-            uint256 currentRatio = getCurrentMakerVaultRatio();
+            uint256 currentRatio = getCurrentCollRatio();
             if (currentRatio < collateralizationRatio.sub(lowerRebalanceTolerance)) { //if current ratio is BELOW goal ratio:
-                uint256 currentCollateral = balanceOfMakerVault();
+                uint256 currentCollateral = balanceOfCollateral();
                 uint256 yieldBearingToRepay = currentCollateral.sub( currentCollateral.mul(currentRatio).div(collateralizationRatio)  );
                 uint256 wantAmountToRepay = yieldBearingToRepay.mul(getWantPerYieldBearing()).div(WAD);
-                MakerDaiDelegateLib.unwind(Math.min(wantAmountToRepay, maxSingleTrade), collateralizationRatio, cdpId);
+                MakerDaiDelegateLib.unwind(Math.min(wantAmountToRepay, maxSingleTrade), collateralizationRatio, address(aToken), address(debtToken));
             } else if (currentRatio > collateralizationRatio.add(upperRebalanceTolerance)) { //if current ratio is ABOVE goal ratio:
-                // Mint the maximum DAI possible for the locked collateral            
-                _lockCollateralAndMintDai(0, _borrowTokenAmountToMint(balanceOfMakerVault()).sub(balanceOfDebt()));
-                MakerDaiDelegateLib.wind(Math.min(maxSingleTrade, balanceOfWant().sub(_debtOutstanding)), collateralizationRatio, cdpId);
+                // Borrow the maximum borrowToken amount possible for the deposited collateral            
+                _depositCollateralAndBorrow(0, _borrowTokenAmountToBorrow(balanceOfCollateral()).sub(balanceOfDebt()));
+                MakerDaiDelegateLib.wind(Math.min(maxSingleTrade, balanceOfWant().sub(_debtOutstanding)), collateralizationRatio, address(debtToken));
             }
         }
         //Check safety of collateralization ratio after all actions:
-        if (balanceOfMakerVault() > 0) {
-            require(getCurrentMakerVaultRatio() > collateralizationRatio.sub(lowerRebalanceTolerance), "unsafe coll. ratio (adjPos)");
+        if (balanceOfCollateral() > 0) {
+            require(getCurrentCollRatio() > collateralizationRatio.sub(lowerRebalanceTolerance), "unsafe coll. ratio (adjPos)");
         }
 
     }
@@ -303,26 +302,21 @@ contract Strategy is BaseStrategy {
             return (_wantAmountNeeded, 0);
         }
         //Not enough want to pay _wantAmountNeeded --> unwind position
-        MakerDaiDelegateLib.unwind(_wantAmountNeeded.sub(wantBalance), collateralizationRatio, cdpId);
+        MakerDaiDelegateLib.unwind(_wantAmountNeeded.sub(wantBalance), collateralizationRatio, address(aToken), address(debtToken));
 
         //update free want after liquidating
-        uint256 looseWant = balanceOfWant();
+        wantBalance = balanceOfWant();
         //loss calculation and returning liquidated amount
-        if (_wantAmountNeeded > looseWant) {
-            _liquidatedAmount = looseWant;
-            _loss = _wantAmountNeeded.sub(looseWant);
+        if (_wantAmountNeeded > wantBalance) {
+            _liquidatedAmount = wantBalance;
+            _loss = _wantAmountNeeded.sub(wantBalance);
         } else {
             _liquidatedAmount = _wantAmountNeeded;
             _loss = 0;
         } 
-        //Check maxLossPPM: allow only maximally a loss measured in parts per million (1e-6) of total assets of strategy (1 = 0.0001%):
-        uint256 strategyAssets = estimatedTotalAssets();
-        if (strategyAssets >= 1e6){ //minimum size to perform maxLossPPM check
-            require(_loss <= strategyAssets.mul(maxLossPPM).div(1e6), "maxLossPPM");
-        }
         //Check safety of collateralization ratio after all actions:
-        if (balanceOfMakerVault() > 0) {
-            require(getCurrentMakerVaultRatio() > collateralizationRatio.sub(lowerRebalanceTolerance), "unsafe coll. ratio (liqPos)");
+        if (balanceOfCollateral() > 0) {
+            require(getCurrentCollRatio() > collateralizationRatio.sub(lowerRebalanceTolerance), "unsafe coll. ratio (liqPos)");
         }
     }
 
@@ -377,11 +371,11 @@ contract Strategy is BaseStrategy {
         returns (bool)
     {
         // Nothing to adjust if there is no collateral locked
-        if (balanceOfMakerVault() == 0) {
+        if (balanceOfCollateral() == 0) {
             return false;
         }
 
-        uint256 currentRatio = getCurrentMakerVaultRatio();
+        uint256 currentRatio = getCurrentCollRatio();
         // If we need to repay debt and are outside the tolerance bands,
         // we do it regardless of the call cost
         if (currentRatio < collateralizationRatio.sub(lowerRebalanceTolerance)) {
@@ -392,14 +386,11 @@ contract Strategy is BaseStrategy {
         return
             currentRatio > collateralizationRatio.add(upperRebalanceTolerance) &&
             balanceOfDebt() > 0 &&
-            isBaseFeeAcceptable() &&
-            MakerDaiDelegateLib.isDaiAvailableToMint(ilk_yieldBearing);
+            isBaseFeeAcceptable();
     }
 
-    function prepareMigration(address _newStrategy) internal override {
-        // Transfer Maker Vault ownership to the new startegy
-        MakerDaiDelegateLib.transferCdp(cdpId, _newStrategy);
-    }
+    function prepareMigration(address _newStrategy) internal override 
+    {}
 
     function protectedTokens()
         internal
@@ -430,20 +421,20 @@ contract Strategy is BaseStrategy {
         require(msg.sender == flashmint);
         require(initiator == address(this));
         require(fee <= expectedFlashmintFee, "fee > expectedFlashmintFee");
-        (Action action, uint256 _cdpId, uint256 _wantAmountInitialOrRequested, uint256 flashloanAmount, uint256 _collateralizationRatio) = abi.decode(data, (Action, uint256, uint256, uint256, uint256));
+        (Action action, uint256 _wantAmountInitialOrRequested, uint256 flashloanAmount, uint256 _collateralizationRatio) = abi.decode(data, (Action, uint256, uint256, uint256));
         _checkAllowance(address(flashmint), address(borrowToken), amount.add(fee));
         if (action == Action.WIND) {
-            MakerDaiDelegateLib._wind(_cdpId, amount.add(fee), _wantAmountInitialOrRequested, _collateralizationRatio);
+            MakerDaiDelegateLib._wind(amount.add(fee), _wantAmountInitialOrRequested, _collateralizationRatio);
         } else if (action == Action.UNWIND) {
             //amount = flashloanAmount, amount.add(fee) = flashloanAmount+fee for flashloan (usually 0)
-            MakerDaiDelegateLib._unwind(_cdpId, amount, amount.add(fee), _wantAmountInitialOrRequested, _collateralizationRatio);
+            MakerDaiDelegateLib._unwind(amount, amount.add(fee), _wantAmountInitialOrRequested, _collateralizationRatio, address(aToken), address(debtToken));
         }
         return keccak256("ERC3156FlashBorrower.onFlashLoan");
     }
 
     // ----------------- INTERNAL FUNCTIONS SUPPORT -----------------
 
-    function _borrowTokenAmountToMint(uint256 _amount) internal returns (uint256) {
+    function _borrowTokenAmountToBorrow(uint256 _amount) internal returns (uint256) {
         return _amount.mul(getWantPerYieldBearing()).mul(WAD).div(collateralizationRatio).div(WAD);
     }
 
@@ -476,29 +467,17 @@ contract Strategy is BaseStrategy {
     }
 
     function balanceOfDebt() public view returns (uint256) {
-        return MakerDaiDelegateLib.debtForCdp(cdpId, ilk_yieldBearing);
+        return debtToken.balanceOf(address(this));
     }
 
     // Returns collateral balance in the vault
-    function balanceOfMakerVault() public view returns (uint256) {
-        return MakerDaiDelegateLib.balanceOfCdp(cdpId, ilk_yieldBearing);
-    }
-
-    function balanceOfDaiAvailableToMint() public view returns (uint256) {
-        return MakerDaiDelegateLib.balanceOfDaiAvailableToMint(ilk_yieldBearing);
+    function balanceOfCollateral() public view returns (uint256) {
+        return aToken.balanceOf(address(this));
     }
 
     // Effective collateralization ratio of the vault
-    function getCurrentMakerVaultRatio() public view returns (uint256) {
-        return MakerDaiDelegateLib.getPessimisticRatioOfCdpWithExternalPrice(cdpId,ilk_yieldBearing,getWantPerYieldBearing(),WAD);
-    }
-
-    function getHypotheticalMakerVaultRatioWithMultiplier(uint256 _wantMultiplier, uint256 _otherTokenMultiplier) public view returns (uint256) {
-        //The Multipliers are basispoints 100.01 = +0.01% increase of DAI price. Multipliers of 10000 are returning the CurrentMakerVaultRatio()
-        //The returned tuple contains (DAI amount, USDC amount) - for want=dai:
-        (uint256 wantUnderlyingBalance, uint256 otherTokenUnderlyingBalance) = yieldBearing.getUnderlyingBalances();
-        uint256 hypotheticalWantPerYieldBearing = wantUnderlyingBalance.mul(_wantMultiplier).div(10000).add(otherTokenUnderlyingBalance.mul(_otherTokenMultiplier).div(10000).mul(1e12)).mul(WAD).div(yieldBearing.totalSupply());
-        return balanceOfMakerVault().mul(hypotheticalWantPerYieldBearing).div(balanceOfDebt().mul(_wantMultiplier));
+    function getCurrentCollRatio() public view returns (uint256) {
+        return _getCurrentPessimisticRatio(getWantPerYieldBearing());
     }
 
     // check if the current baseFee is below our external target
@@ -507,19 +486,36 @@ contract Strategy is BaseStrategy {
     }
 
 
-    // ----------------- INTERNAL CALCS -----------------
+    // ----------------- AAVE INTERNAL CALCS -----------------
 
-    function _lockCollateralAndMintDai(
+    function _depositCollateralAndBorrow(
         uint256 collateralAmount,
-        uint256 daiToMint
+        uint256 borrowAmount
     ) internal {
-        MakerDaiDelegateLib.lockGemAndDraw(
-            gemJoinAdapter,
-            cdpId,
-            collateralAmount,
-            daiToMint,
-            balanceOfDebt()
-        );
+        MakerDaiDelegateLib.depositCollateral(collateralAmount);
+        MakerDaiDelegateLib.borrowBorrowToken(borrowAmount);
     }
+
+    function _getTokenPriceInETH(address _token) internal view returns (uint256){
+        return WAD.mul(WAD).div(priceOracle.getAssetPrice(_token));
+    }
+
+    function _getCurrentPessimisticRatio(uint256 externalPrice) public view returns (uint256) {
+        // Use pessimistic price to determine the worst ratio possible
+        uint256 price = WAD.mul(_getTokenPriceInETH(address(borrowToken))).div(_getTokenPriceInETH(address(yieldBearing)));
+        price = Math.min(price, externalPrice);
+        require(price > 0); // dev: invalid price
+
+        uint256 totalCollateralValue = balanceOfCollateral().mul(price);
+        uint256 totalDebt = balanceOfDebt();
+
+        // If for some reason we do not have debt (e.g: deposits under dust)
+        // make sure the operation does not revert
+        if (totalDebt == 0) {
+            totalDebt = 1;
+        }
+        return totalCollateralValue.div(totalDebt);
+    }
+
 
 }

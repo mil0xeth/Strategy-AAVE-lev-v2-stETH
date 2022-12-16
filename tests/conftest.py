@@ -227,7 +227,8 @@ def unirouter():
 
 @pytest.fixture
 def amount(accounts, token, user, token_whale):
-    amount = 50000 * 10 ** token.decimals()
+    #amount = 50000 * 10 ** token.decimals()
+    amount = 500 * 10 ** token.decimals()
     # In order to get some funds for the token you are about to use,
     # it impersonate an exchange address to use it's funds.
     reserve = token_whale
@@ -237,7 +238,8 @@ def amount(accounts, token, user, token_whale):
 
 @pytest.fixture
 def amount2(accounts, token, user2, token_whale):
-    amount = 100000 * 10 ** token.decimals()
+    #amount = 100000 * 10 ** token.decimals()
+    amount = 100 * 10 ** token.decimals()
     # In order to get some funds for the token you are about to use,
     # it impersonate an exchange address to use it's funds.
     #reserve = accounts.at("0xF977814e90dA44bFA03b6295A0616a897441aceC", force=True)
@@ -247,8 +249,8 @@ def amount2(accounts, token, user2, token_whale):
 
 @pytest.fixture
 def amountBIGTIME(accounts, token, user, token_whale):
-    #amount = 20000 * 10 ** token.decimals()
-    amount = 200000 * 10 ** token.decimals()
+    #amount = 200000 * 10 ** token.decimals()
+    amount = 200 * 10 ** token.decimals()
     # In order to get some funds for the token you are about to use,
     # it impersonate an exchange address to use it's funds.
     #reserve = accounts.at("0xF977814e90dA44bFA03b6295A0616a897441aceC", force=True)
@@ -258,8 +260,8 @@ def amountBIGTIME(accounts, token, user, token_whale):
 
 @pytest.fixture
 def amountBIGTIME2(accounts, token, user2, token_whale):
-    #amount = 6000 * 10 ** token.decimals()
-    amount = 1000000 * 10 ** token.decimals()
+    #amount = 1000000 * 10 ** token.decimals()
+    amount = 100 * 10 ** token.decimals()
     # In order to get some funds for the token you are about to use,
     # it impersonate an exchange address to use it's funds.
     #reserve = accounts.at("0xF977814e90dA44bFA03b6295A0616a897441aceC", force=True)

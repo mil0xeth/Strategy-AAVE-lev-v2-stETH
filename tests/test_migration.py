@@ -27,7 +27,5 @@ def test_migration(
     # migrate to a new strategy
     new_strategy = strategist.deploy(Strategy, vault, "StrategyName")
     vault.migrateStrategy(strategy, new_strategy, {"from": gov})
-    orig_cdp_id = strategy.cdpId()
-    new_strategy.shiftToCdp(orig_cdp_id, {"from": gov})
     new_strategy.harvest({"from": gov})
     assert (pytest.approx(new_strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount )

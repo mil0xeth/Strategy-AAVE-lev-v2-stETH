@@ -44,47 +44,6 @@ def test_set_rebalance_tolerance_acl(
 
 
 
-def test_shift_cdp_acl(strategy, gov, strategist, management, guardian, user):
-    # cdp-not-allowed should be the revert msg when allowed / we are shifting to a random cdp
-    with reverts("cdp-not-allowed"):
-        strategy.shiftToCdp(123, {"from": gov})
-
-    with reverts("!authorized"):
-        strategy.shiftToCdp(123, {"from": strategist})
-
-    with reverts("!authorized"):
-        strategy.shiftToCdp(123, {"from": management})
-
-    with reverts("!authorized"):
-        strategy.shiftToCdp(123, {"from": guardian})
-
-    with reverts("!authorized"):
-        strategy.shiftToCdp(123, {"from": user})
-
-
-def test_allow_managing_cdp_acl(strategy, gov, strategist, management, guardian, user):
-    cdpManager = Contract("0x5ef30b9986345249bc32d8928B7ee64DE9435E39")
-    cdp = strategy.cdpId()
-
-    with reverts("!authorized"):
-        strategy.grantCdpManagingRightsToUser(user, True, {"from": strategist})
-
-    with reverts("!authorized"):
-        strategy.grantCdpManagingRightsToUser(user, True, {"from": management})
-
-    with reverts("!authorized"):
-        strategy.grantCdpManagingRightsToUser(user, True, {"from": guardian})
-
-    with reverts("!authorized"):
-        strategy.grantCdpManagingRightsToUser(user, True, {"from": user})
-
-    strategy.grantCdpManagingRightsToUser(user, True, {"from": gov})
-    cdpManager.cdpAllow(cdp, guardian, 1, {"from": user})
-
-    strategy.grantCdpManagingRightsToUser(user, False, {"from": gov})
-
-    with reverts("cdp-not-allowed"):
-        cdpManager.cdpAllow(cdp, guardian, 1, {"from": user})
 
 
 
@@ -106,46 +65,3 @@ def test_emergency_debt_repayment_acl(
     with reverts("!authorized"):
         strategy.emergencyDebtRepayment(strategy.estimatedTotalAssets(), {"from": user})
 
-
-def DISABLED_repay_debt_acl(
-    vault,
-    strategy,
-    token,
-    amount,
-    dai,
-    dai_whale,
-    gov,
-    strategist,
-    management,
-    guardian,
-    keeper,
-    user,
-):
-    # Deposit to the vault
-    token.approve(vault.address, amount, {"from": user})
-    vault.deposit(amount, {"from": user})
-
-    # Send funds through the strategy
-    chain.sleep(1)
-    strategy.harvest({"from": gov})
-
-    dai.transfer(strategy, 1000 * 1e18, {"from": dai_whale})
-    debt_balance = strategy.balanceOfDebt()
-
-    strategy.repayDebtWithDaiBalance(1, {"from": gov})
-    assert strategy.balanceOfDebt() == (debt_balance - 1)
-
-    strategy.repayDebtWithDaiBalance(2, {"from": management})
-    assert strategy.balanceOfDebt() == (debt_balance - 3)
-
-    with reverts("!authorized"):
-        strategy.repayDebtWithDaiBalance(3, {"from": strategist})
-
-    with reverts("!authorized"):
-        strategy.repayDebtWithDaiBalance(4, {"from": guardian})
-
-    with reverts("!authorized"):
-        strategy.repayDebtWithDaiBalance(5, {"from": keeper})
-
-    with reverts("!authorized"):
-        strategy.repayDebtWithDaiBalance(6, {"from": user})

@@ -13,8 +13,8 @@ def test_tend_trigger_conditions(
     strategy.harvest({"from": gov})
 
     #orig_target = strategy.collateralizationRatio()
-    assert ( pytest.approx(strategy.getCurrentMakerVaultRatio(), rel=RELATIVE_APPROX) == strategy.collateralizationRatio())
-    orig_target = strategy.getCurrentMakerVaultRatio()
+    assert ( pytest.approx(strategy.getCurrentCollRatio(), rel=RELATIVE_APPROX) == strategy.collateralizationRatio())
+    orig_target = strategy.getCurrentCollRatio()
     rebalance_tolerance = strategy.lowerRebalanceTolerance()
 
     # Make sure we are in equilibrium
