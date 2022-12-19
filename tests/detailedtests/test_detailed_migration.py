@@ -14,8 +14,6 @@ def test_detailed_migration(
     gov,
     user,
     cloner,
-    ilk_yieldBearing,
-    gemJoinAdapter,
     RELATIVE_APPROX_LOSSY,
 ):
     # Deposit to the vault and harvest

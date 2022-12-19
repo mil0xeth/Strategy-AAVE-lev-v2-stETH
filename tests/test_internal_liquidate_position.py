@@ -29,7 +29,6 @@ def test_liquidates_all_if_has_more_want_balance(test_strategy, token, token_wha
 def test_liquidate_more_than_we_have_should_report_loss(
     test_strategy, token, token_whale, gov
 ):
-    test_strategy.setMaxLossPPM(1000000, {"from": gov})
     amount = Wei("50 ether")
     token.approve(test_strategy, amount, {"from": token_whale})
     token.transfer(test_strategy, amount, {"from": token_whale})
@@ -73,7 +72,7 @@ def test_liquidate_position_without_enough_profit_by_selling_want(
 
 # In this test the strategy has enough profit to close the whole position
 def test_happy_liquidation(
-    chain, token, vault, test_strategy, token_whale, partnerToken, dai, dai_whale, user, amount, gov
+    chain, token, vault, test_strategy, token_whale, steth_whale, dai, dai_whale, user, amount, gov, steth
 ):
     # Deposit to the vault
     token.approve(vault.address, amount, {"from": user})
@@ -87,12 +86,11 @@ def test_happy_liquidation(
     chain.sleep(24 * 60 * 60 * 7)
     chain.mine(1)
 
-    #Create profits for UNIV3 DAI<->USDC
-    uniswapv3 = Contract("0xE592427A0AEce92De3Edee1F18E0157C05861564")
-    #token --> partnerToken
-    uniswapAmount = token.balanceOf(token_whale)*0.1
-    token.approve(uniswapv3, uniswapAmount, {"from": token_whale})
-    uniswapv3.exactInputSingle((token, partnerToken, 100, token_whale, 1856589943, uniswapAmount, 0, 0), {"from": token_whale})
+    #Create profits
+    days = 14
+    #send some steth to simulate profit. 10% apr
+    rewards_amount = amount/10/365*days
+    steth.transfer(test_strategy, rewards_amount*2, {'from': steth_whale})
     chain.sleep(1)
 
 

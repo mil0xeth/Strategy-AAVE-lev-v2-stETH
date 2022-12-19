@@ -8,13 +8,14 @@ import {IERC20,Address} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol"
 import "./libraries/MakerDaiDelegateLib.sol";
 import "../interfaces/yearn/IBaseFee.sol";
 import "../interfaces/yearn/IVault.sol";
-import "../interfaces/GUNI/GUniPool.sol";
+
+import "../interfaces/lido/ISteth.sol";
+import "../interfaces/curve/Curve.sol";
+import "../interfaces/chainlink/AggregatorInterface.sol";
 
 import "../interfaces/aave/ILendingPool.sol";
 import "../interfaces/aave/IProtocolDataProvider.sol";
 import "../../interfaces/aave/IPriceOracle.sol";
-//import "../interfaces/aave/IAaveIncentivesController.sol";
-//import "../interfaces/aave/IStakedAave.sol";
 import "../interfaces/aave/IAToken.sol";
 import "../interfaces/aave/IVariableDebtToken.sol";
 
@@ -23,17 +24,17 @@ contract Strategy is BaseStrategy {
     using Address for address;
     enum Action {WIND, UNWIND}
 
-    //GUNIDAIUSDC2 - Gelato Uniswap DAI/USDC2 LP 2 - 0.01% fee
-    GUniPool internal constant yieldBearing = GUniPool(0x50379f632ca68D36E50cfBC8F78fe16bd1499d1e);
-    //DAI borrowToken:
-    IERC20 internal constant borrowToken = IERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+    //stETH is yieldBearing:
+    ISteth internal constant yieldBearing =  ISteth(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
+    //WETH is borrowToken:
+    IERC20 internal constant borrowToken = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+
+    // Use Chainlink oracle to obtain latest want/ETH price
+    AggregatorInterface public chainlinkYieldBearingToETHPriceFeed;
 
     //AAVEV2 lending pool:
-    //ILendingPool private constant lendingPool = ILendingPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
-    //IProtocolDataProvider private constant protocolDataProvider = IProtocolDataProvider(0x057835Ad21a177dbdd3090bB1CAE03EaCF78Fc6d);
-    //AAVEV2 AMM lending pool:
-    ILendingPool private constant lendingPool = ILendingPool(0x7937D4799803FbBe595ed57278Bc4cA21f3bFfCB);
-    IProtocolDataProvider private constant protocolDataProvider = IProtocolDataProvider(0xc443AD9DDE3cecfB9dfC5736578f447aFE3590ba);
+    ILendingPool private constant lendingPool = ILendingPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
+    IProtocolDataProvider private constant protocolDataProvider = IProtocolDataProvider(0x057835Ad21a177dbdd3090bB1CAE03EaCF78Fc6d);
 
     IPriceOracle private constant priceOracle = IPriceOracle(0xA50ba011c48153De246E5192C8f9258A2ba79Ca9);
     uint16 private constant referral = 7; // Yearn's aave referral code
@@ -42,8 +43,8 @@ contract Strategy is BaseStrategy {
     IAToken public aToken;
     IVariableDebtToken public debtToken;
 
-    //Flashmint:
-    address internal constant flashmint = 0x1EB4CF3A948E7D72A198fe073cCb8C7a948cD853;
+    //Balancer Flashloan:
+    address internal constant balancer = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
 
     //----------- MAKER INIT    
     // Units used in Maker contracts
@@ -67,8 +68,8 @@ contract Strategy is BaseStrategy {
     // Minimum Single Trade & Minimum Profit to be taken:
     uint256 public minSingleTrade;
 
-    //Expected flashmint fee:
-    uint256 public expectedFlashmintFee;
+    //Expected flashloan fee:
+    uint256 public expectedFlashloanFee;
 
     // Name of the strategy
     string internal strategyName;
@@ -102,13 +103,16 @@ contract Strategy is BaseStrategy {
     ) internal {
         strategyName = _strategyName;
 
+        //chainlinkYieldBearingToETHPriceFeed = AggregatorInterface(_chainlinkYieldBearingToETHPriceFeed);
+        chainlinkYieldBearingToETHPriceFeed = AggregatorInterface(0x86392dC19c0b719886221c78AB11eb8Cf5c52812);
+
         //10M$ dai or usdc maximum trade
-        maxSingleTrade = 5_000_000 * 1e18;
+        maxSingleTrade = 5_000 * 1e18;
         //10M$ dai or usdc maximum trade
         //minSingleTrade = 1 * 1e17;
         minSingleTrade = 1 * 1e10;
 
-        creditThreshold = 1e6 * 1e18;
+        creditThreshold = 1e3 * 1e18;
         maxReportDelay = 21 days; // 21 days in seconds, if we hit this then harvestTrigger = True
 
         // Set health check to health.ychad.eth
@@ -124,7 +128,6 @@ contract Strategy is BaseStrategy {
         collateralizationRatio = (20000 * WAD) / 10000;
 
         // Set aave tokens
-        //(address _aToken, , address _debtToken) = protocolDataProvider.getReserveTokensAddresses(address(yieldBearing));
         (address _aToken, , ) = protocolDataProvider.getReserveTokensAddresses(address(yieldBearing));
         ( , , address _debtToken) = protocolDataProvider.getReserveTokensAddresses(address(borrowToken));
         aToken = IAToken(_aToken);
@@ -164,8 +167,8 @@ contract Strategy is BaseStrategy {
         maxSingleTrade = _maxSingleTrade;
     }
 
-    function setExpectedFlashmintFee(uint256 _expectedFlashmintFee) external onlyVaultManagers {
-        expectedFlashmintFee = _expectedFlashmintFee;
+    function setExpectedFlashloanFee(uint256 _expectedFlashloanFee) external onlyVaultManagers {
+        expectedFlashloanFee = _expectedFlashloanFee;
     }
 
     // Target collateralization ratio to maintain within bounds
@@ -283,7 +286,7 @@ contract Strategy is BaseStrategy {
             }
         }
         //Check safety of collateralization ratio after all actions:
-        if (balanceOfCollateral() > 0) {
+        if (balanceOfDebt() > 0) {
             require(getCurrentCollRatio() > collateralizationRatio.sub(lowerRebalanceTolerance), "unsafe coll. ratio (adjPos)");
         }
 
@@ -315,7 +318,7 @@ contract Strategy is BaseStrategy {
             _loss = 0;
         } 
         //Check safety of collateralization ratio after all actions:
-        if (balanceOfCollateral() > 0) {
+        if (balanceOfDebt() > 0) {
             require(getCurrentCollRatio() > collateralizationRatio.sub(lowerRebalanceTolerance), "unsafe coll. ratio (liqPos)");
         }
     }
@@ -410,26 +413,26 @@ contract Strategy is BaseStrategy {
 
 
     // ----------------- FLASHLOAN CALLBACK -----------------
-    //Flashmint Callback:
-    function onFlashLoan(
-        address initiator,
-        address,
-        uint256 amount,
-        uint256 fee,
+    //Flashloan Callback:
+    function receiveFlashLoan(
+        IERC20[] calldata tokens,
+        uint256[] calldata amounts,
+        uint256[] calldata fees,
         bytes calldata data
-    ) external returns (bytes32) {
-        require(msg.sender == flashmint);
-        require(initiator == address(this));
-        require(fee <= expectedFlashmintFee, "fee > expectedFlashmintFee");
+    ) external {
+        require(msg.sender == balancer);
+        //require(initiator == address(this));
+        uint256 fee = fees[0];
+        require(fee <= expectedFlashloanFee, "fee > expectedFlashloanFee");
         (Action action, uint256 _wantAmountInitialOrRequested, uint256 flashloanAmount, uint256 _collateralizationRatio) = abi.decode(data, (Action, uint256, uint256, uint256));
-        _checkAllowance(address(flashmint), address(borrowToken), amount.add(fee));
+        uint256 amount = amounts[0];
+        _checkAllowance(balancer, address(borrowToken), amount.add(fee));
         if (action == Action.WIND) {
             MakerDaiDelegateLib._wind(amount.add(fee), _wantAmountInitialOrRequested, _collateralizationRatio);
         } else if (action == Action.UNWIND) {
             //amount = flashloanAmount, amount.add(fee) = flashloanAmount+fee for flashloan (usually 0)
             MakerDaiDelegateLib._unwind(amount, amount.add(fee), _wantAmountInitialOrRequested, _collateralizationRatio, address(aToken), address(debtToken));
         }
-        return keccak256("ERC3156FlashBorrower.onFlashLoan");
     }
 
     // ----------------- INTERNAL FUNCTIONS SUPPORT -----------------
@@ -461,9 +464,7 @@ contract Strategy is BaseStrategy {
 
     //get amount of Want in Wei that is received for 1 yieldBearing
     function getWantPerYieldBearing() public view returns (uint256){
-        //The returned tuple contains (DAI amount, USDC amount) - for want=dai:
-        (uint256 wantUnderlyingBalance, uint256 otherTokenUnderlyingBalance) = yieldBearing.getUnderlyingBalances();
-        return wantUnderlyingBalance.add(otherTokenUnderlyingBalance.mul(1e12)).mul(WAD).div(yieldBearing.totalSupply());
+        return uint256(chainlinkYieldBearingToETHPriceFeed.latestAnswer());
     }
 
     function balanceOfDebt() public view returns (uint256) {
@@ -500,10 +501,10 @@ contract Strategy is BaseStrategy {
         return WAD.mul(WAD).div(priceOracle.getAssetPrice(_token));
     }
 
-    function _getCurrentPessimisticRatio(uint256 externalPrice) public view returns (uint256) {
+    function _getCurrentPessimisticRatio(uint256 price) internal view returns (uint256) {
         // Use pessimistic price to determine the worst ratio possible
-        uint256 price = WAD.mul(_getTokenPriceInETH(address(borrowToken))).div(_getTokenPriceInETH(address(yieldBearing)));
-        price = Math.min(price, externalPrice);
+        //uint256 externalPrice = WAD.mul(_getTokenPriceInETH(address(borrowToken))).div(_getTokenPriceInETH(address(yieldBearing)));
+        //price = Math.min(price, externalPrice);
         require(price > 0); // dev: invalid price
 
         uint256 totalCollateralValue = balanceOfCollateral().mul(price);
@@ -517,5 +518,7 @@ contract Strategy is BaseStrategy {
         return totalCollateralValue.div(totalDebt);
     }
 
+    //make strategy payable to be able to wrap and unwrap weth
+    receive() external payable {}
 
 }

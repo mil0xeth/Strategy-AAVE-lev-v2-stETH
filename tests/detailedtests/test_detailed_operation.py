@@ -3,7 +3,7 @@ import pytest
 from brownie import reverts
 
 
-def test_operation(chain, token, vault, strategy, user, amount, gov, RELATIVE_APPROX_LOSSY, token_whale, partnerToken):
+def test_operation(chain, token, vault, strategy, user, amount, gov, RELATIVE_APPROX_LOSSY, token_whale):
     # Deposit to the vault
     user_balance_before = token.balanceOf(user)
     token.approve(vault.address, amount, {"from": user})
@@ -23,7 +23,7 @@ def test_operation(chain, token, vault, strategy, user, amount, gov, RELATIVE_AP
     assert (pytest.approx(token.balanceOf(user), rel=RELATIVE_APPROX_LOSSY) == user_balance_before)
 
 def test_emergency_exit(
-    dai, gemJoinAdapter, chain, token, vault, strategy, user, amount, gov, RELATIVE_APPROX_LOSSY
+    dai, chain, token, vault, strategy, user, amount, gov, RELATIVE_APPROX_LOSSY
 ):
     # Deposit to the vault
     token.approve(vault.address, amount, {"from": user})

@@ -61,7 +61,7 @@ def test_borrow_token_transfer_increments_profits(
     chain.sleep(1)
     test_strategy.harvest({"from": gov})
 
-    amount = 50_000 * (10 ** borrow_token.decimals())
+    amount = 5_000 * (10 ** borrow_token.decimals())
     borrow_token.transfer(test_strategy, amount, {"from": borrow_whale})
 
     chain.sleep(1)
@@ -96,25 +96,24 @@ def test_deposit_should_not_increment_profits(vault, strategy, token, token_whal
 
 
 def test_direct_transfer_with_actual_profits_100k(
-    vault, token, token_whale, borrow_token, borrow_whale, gov, test_strategy, partnerToken, Contract
+    vault, token, token_whale, borrow_token, borrow_whale, gov, test_strategy, Contract, steth_whale, steth
 ):
     strategy = test_strategy
     initialProfit = vault.strategies(strategy).dict()["totalGain"]
     assert initialProfit == 0
 
     token.approve(vault, 2 ** 256 - 1, {"from": token_whale})
-    deposit_tx = vault.deposit(1e5 * (10 ** token.decimals()), {"from": token_whale})
+    deposit_tx = vault.deposit(1e3 * (10 ** token.decimals()), {"from": token_whale})
 
     chain.sleep(1)
     harvest_tx = strategy.harvest({"from": gov})
     assert strategy.estimatedTotalAssets()/1e18 > 980 
 
-    #Create profits for UNIV3 DAI<->USDC
-    uniswapv3 = Contract("0xE592427A0AEce92De3Edee1F18E0157C05861564")
-    #token --> partnerToken
-    uniswapAmount = token.balanceOf(token_whale)*0.1
-    token.approve(uniswapv3, uniswapAmount, {"from": token_whale})
-    uniswapv3.exactInputSingle((token, partnerToken, 100, token_whale, 1856589943, uniswapAmount, 0, 0), {"from": token_whale})
+    #Create profits
+    days = 14
+    #send some steth to simulate profit. 10% apr
+    rewards_amount = 1e3* (10 ** token.decimals())/10/365*days
+    steth.transfer(strategy, rewards_amount*2, {'from': steth_whale})
     chain.sleep(1)
 
     # sleep for a day
@@ -137,7 +136,7 @@ def test_direct_transfer_with_actual_profits_100k(
 
 
 def test_direct_transfer_with_actual_profits_1000(
-    vault, token, token_whale, borrow_token, borrow_whale, gov, test_strategy, partnerToken, Contract
+    vault, token, token_whale, borrow_token, borrow_whale, gov, test_strategy, Contract, steth_whale, steth
 ):
     strategy = test_strategy
     initialProfit = vault.strategies(strategy).dict()["totalGain"]
@@ -150,12 +149,12 @@ def test_direct_transfer_with_actual_profits_1000(
     harvest_tx = strategy.harvest({"from": gov})
     assert strategy.estimatedTotalAssets()/1e18 > 99
 
-    #Create profits for UNIV3 DAI<->USDC
-    uniswapv3 = Contract("0xE592427A0AEce92De3Edee1F18E0157C05861564")
-    #token --> partnerToken
-    uniswapAmount = token.balanceOf(token_whale)*0.1
-    token.approve(uniswapv3, uniswapAmount, {"from": token_whale})
-    uniswapv3.exactInputSingle((token, partnerToken, 100, token_whale, 1856589943, uniswapAmount, 0, 0), {"from": token_whale})
+    #Create profits
+    days = 14
+    #send some steth to simulate profit. 10% apr
+    rewards_amount = 1000* (10 ** token.decimals())/10/365*days
+    steth.transfer(strategy, rewards_amount*2, {'from': steth_whale})
+    chain.sleep(1)
     chain.sleep(1)
     # sleep for a day
     chain.sleep(24 * 3600)

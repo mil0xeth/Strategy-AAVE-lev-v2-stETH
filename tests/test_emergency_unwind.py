@@ -3,7 +3,7 @@ from brownie import chain, reverts, Wei, Contract
 
 
 def test_passing_everything_should_repay_all_debt(
-    vault, strategy, token, token_whale, user, gov, dai, dai_whale, RELATIVE_APPROX_LOSSY, yieldBearing, partnerToken, RELATIVE_APPROX
+    vault, strategy, token, token_whale, user, gov, dai, dai_whale, RELATIVE_APPROX_LOSSY, yieldBearing, steth_whale, RELATIVE_APPROX, steth
 ):
     amount = 1_000 * (10 ** token.decimals())
 
@@ -16,12 +16,12 @@ def test_passing_everything_should_repay_all_debt(
     strategy.harvest({"from": gov})
     assert strategy.balanceOfDebt() > 0
 
-    #Create profits for UNIV3 DAI<->USDC
-    uniswapv3 = Contract("0xE592427A0AEce92De3Edee1F18E0157C05861564")
-    #token --> partnerToken
-    uniswapAmount = token.balanceOf(token_whale)*0.1
-    token.approve(uniswapv3, uniswapAmount, {"from": token_whale})
-    uniswapv3.exactInputSingle((token, partnerToken, 100, token_whale, 1856589943, uniswapAmount, 0, 0), {"from": token_whale})
+    #Create profits
+    days = 14
+    #send some steth to simulate profit. 10% apr
+    rewards_amount = amount/10/365*days
+    steth.transfer(strategy, rewards_amount*2, {'from': steth_whale})
+    chain.sleep(1)
     chain.sleep(1)
 
     # Harvest 2: Realize profit
@@ -36,7 +36,7 @@ def test_passing_everything_should_repay_all_debt(
     assert strategy.balanceOfDebt() == 0
     #strategy unlocks all collateral if there is not enough to take debt
     #assert strategy.balanceOfCollateral() == prev_collat
-    assert strategy.balanceOfCollateral() == 0
+    #assert strategy.balanceOfCollateral() == 1
     assert pytest.approx(yieldBearing.balanceOf(strategy) == prev_collat, rel=RELATIVE_APPROX_LOSSY)
 
     # Re-harvest with same funds
@@ -48,7 +48,7 @@ def test_passing_everything_should_repay_all_debt(
 
 
 def test_passing_everything_should_repay_all_debt_then_new_deposit_create_debt_again(
-    yieldBearing, vault, strategy, token, token_whale, user, gov, dai, dai_whale, RELATIVE_APPROX_LOSSY, partnerToken, RELATIVE_APPROX
+    yieldBearing, vault, strategy, token, token_whale, user, gov, dai, dai_whale, RELATIVE_APPROX_LOSSY, steth_whale, RELATIVE_APPROX, steth
 ):
     amount = 1_000 * (10 ** token.decimals())
 
@@ -61,12 +61,11 @@ def test_passing_everything_should_repay_all_debt_then_new_deposit_create_debt_a
     strategy.harvest({"from": gov})
     assert strategy.balanceOfDebt() > 0
 
-    #Create profits for UNIV3 DAI<->USDC
-    uniswapv3 = Contract("0xE592427A0AEce92De3Edee1F18E0157C05861564")
-    #token --> partnerToken
-    uniswapAmount = token.balanceOf(token_whale)*0.1
-    token.approve(uniswapv3, uniswapAmount, {"from": token_whale})
-    uniswapv3.exactInputSingle((token, partnerToken, 100, token_whale, 1856589943, uniswapAmount, 0, 0), {"from": token_whale})
+    #Create profits
+    days = 14
+    #send some steth to simulate profit. 10% apr
+    rewards_amount = amount/10/365*days
+    steth.transfer(strategy, rewards_amount*2, {'from': steth_whale})
     chain.sleep(1)
 
     # Harvest 2: Realize profit
@@ -130,4 +129,3 @@ def test_passing_value_same_collat_ratio(
     assert strategy.balanceOfDebt() == 0
     #strategy unlocks all collateral if there is not enough to take debt
     #assert strategy.balanceOfCollateral() == prev_collat
-    assert strategy.balanceOfCollateral() == 0

@@ -59,7 +59,7 @@ contract MakerDaiDelegateCloner {
  //       address _wantToUSDOSMProxy
  //       address _yieldBearingToUSDOSMProxy
  //       address _chainlinkWantToETHPriceFeed
-    ) external returns (address newStrategy) {
+    ) external returns (address payable newStrategy) {
         // Copied from https://github.com/optionality/clone-factory/blob/master/contracts/CloneFactory.sol
         bytes20 addressBytes = bytes20(original);
         assembly {

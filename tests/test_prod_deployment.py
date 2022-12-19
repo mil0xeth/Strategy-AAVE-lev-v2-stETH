@@ -5,7 +5,7 @@ from eth_abi import encode_single
 
 
 def test_prod(
-    healthCheck, productionVault, yieldBearing, token, weth, dai, strategist, token_whale, dai_whale, MakerDaiDelegateClonerChoice, Strategy, partnerToken
+    healthCheck, productionVault, yieldBearing, token, weth, dai, strategist, token_whale, dai_whale, MakerDaiDelegateClonerChoice, Strategy, steth_whale
 ):
 
     vault = productionVault
@@ -36,6 +36,7 @@ def test_prod(
     token.approve(vault, 2 ** 256 - 1, {"from": token_whale})
     vault.deposit(2500 * (10 ** token.decimals()), {"from": token_whale})
 
+    strategy.setDoHealthCheck(False, {"from": gov})
     tx1 = strategy.harvest({"from": gov})
     tx1.wait(1)
     time.sleep(1)
@@ -49,14 +50,14 @@ def test_prod(
     chain.mine(1)
     assert vault.strategies(strategy).dict()["totalLoss"] == 0
     #PROFITS:
-    #Create profits for UNIV3 DAI<->USDC
-    uniswapv3 = Contract("0xE592427A0AEce92De3Edee1F18E0157C05861564")
-    #token --> partnerToken
-    uniswapAmount = token.balanceOf(token_whale)*0.1
-    token.approve(uniswapv3, uniswapAmount, {"from": token_whale})
-    uniswapv3.exactInputSingle((token, partnerToken, 100, token_whale, 1856589943, uniswapAmount, 0, 0), {"from": token_whale})
+    #Create profits
+    days = 14
+    #send some steth to simulate profit. 10% apr
+    rewards_amount = 2500 * (10 ** token.decimals())/10/365*days
+    steth.transfer(strategy, rewards_amount*2, {'from': steth_whale})
     chain.sleep(1)
 
+    strategy.setDoHealthCheck(False, {"from": gov})
     tx2 = strategy.harvest({"from": gov})
     tx2.wait(1) 
     time.sleep(1)
@@ -76,5 +77,5 @@ def test_prod(
     print(f"strat estimatedTotalAssets: {strategy.estimatedTotalAssets()/1e18:_}")
     print(f"totalLoss: {vault.strategies(strategy).dict()['totalLoss']/1e18:_}")
 
-    assert vault.strategies(strategy).dict()["totalLoss"] < Wei("0.75 ether")
+    assert vault.strategies(strategy).dict()["totalLoss"] < Wei("1 ether")
     assert vault.strategies(strategy).dict()["totalDebt"] == 0

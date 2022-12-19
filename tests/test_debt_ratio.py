@@ -51,7 +51,7 @@ def test_decrease(vault, strategy, gov, token, token_whale):
     assert vault.strategies(strategy).dict()["totalDebt"] < 15 * (
         10 ** token.decimals()
     )
-    assert vault.strategies(strategy).dict()["totalLoss"] < 1e17
+    assert vault.strategies(strategy).dict()["totalLoss"] < 1e18
 
 
 def test_gradual_decrease(vault, strategy, gov, token, token_whale, healthCheck):
@@ -302,7 +302,7 @@ def test_gradual_decrease_with_profitable_vault(vault, strategy, gov, token, tok
     assert vault.strategies(strategy).dict()["totalDebt"] < 15 * (
         10 ** token.decimals()
     )
-    assert vault.strategies(strategy).dict()["totalLoss"] < 1e17
+    assert vault.strategies(strategy).dict()["totalLoss"] < 1e18
 
 
 

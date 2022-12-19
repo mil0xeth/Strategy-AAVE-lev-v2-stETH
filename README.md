@@ -1,5 +1,5 @@
-# Strategy-AAVE-lev-v2-GUNIV3DAIUSDC
-- The strategy uses the want token (here: DAI) to mint GUNIV3DAIUSDC (either 0.05% or 0.01% fees) using Maker's PSM with 0% slippage (DAI 1:1 USDC) to then collateralize G-UNI on AAVE and leverage with Maker's Flashmint (a Flashloan module) up to 50x (102% collateralization ratio).
+# Strategy-AAVE-lev-v2-stETH
+- The strategy uses the want token (here: ETH) to stake stETH collateralize it on AAVE and leverage with Balancer Flashloan up to 2x.
 
 ## Installation and Setup
 

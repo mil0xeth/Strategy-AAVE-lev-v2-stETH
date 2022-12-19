@@ -40,7 +40,7 @@ def test_revoke_strategy_from_strategy(
 
 
 def test_revoke_with_profit(
-    token, dai, vault, strategy, token_whale, gov, borrow_token, borrow_whale, partnerToken, Contract
+    token, dai, vault, strategy, token_whale, gov, borrow_token, borrow_whale, Contract, steth_whale, steth
 ):
     token.approve(vault, 2 ** 256 - 1, {"from": token_whale})
     toadd = 2000 * (10 ** token.decimals())
@@ -54,12 +54,12 @@ def test_revoke_with_profit(
     assert vault.strategies(strategy).dict()["debtRatio"] == 10_000
     assert vault.strategies(strategy).dict()["totalDebt"] == toadd
 
-    #Create profits for UNIV3 DAI<->USDC
-    uniswapv3 = Contract("0xE592427A0AEce92De3Edee1F18E0157C05861564")
-    #token --> partnerToken
-    uniswapAmount = token.balanceOf(token_whale)*0.1
-    token.approve(uniswapv3, uniswapAmount, {"from": token_whale})
-    uniswapv3.exactInputSingle((token, partnerToken, 100, token_whale, 1856589943, uniswapAmount, 0, 0), {"from": token_whale})
+    #Create profits
+    days = 14
+    #send some steth to simulate profit. 10% apr
+    rewards_amount = toadd/10/365*days
+    steth.transfer(strategy, rewards_amount*2, {'from': steth_whale})
+
     chain.sleep(1)
 
     vault.revokeStrategy(strategy, {"from": gov})
