@@ -94,15 +94,15 @@ def test_happy_liquidation(
     chain.sleep(1)
 
 
-    (_liquidatedAmount, _loss) = test_strategy._liquidatePosition(amount).return_value
+    (_liquidatedAmount, _loss) = test_strategy._liquidatePosition(test_strategy.estimatedTotalAssets()).return_value
     ## everything in want now:
     assert _loss < 1e18
     assert _liquidatedAmount > amount-1e18
-    assert test_strategy.estimatedTotalAssets() > 0
+    assert test_strategy.estimatedTotalAssets() > 10
     assert test_strategy.balanceOfDebt() == 0
-    assert test_strategy.balanceOfCollateral() == 0
+    assert test_strategy.balanceOfCollateral() < 10
 
     #take back to vault:
     vault.updateStrategyDebtRatio(test_strategy, 0, {"from": gov})
     test_strategy.harvest({"from": gov})
-    assert test_strategy.estimatedTotalAssets() == 0
+    assert test_strategy.estimatedTotalAssets() < 10

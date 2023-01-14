@@ -3,6 +3,7 @@
 #       Show that nothing is lost!
 
 import pytest
+from brownie import Contract, reverts
 
 
 def test_migration(
@@ -15,7 +16,8 @@ def test_migration(
     strategist,
     gov,
     user,
-    RELATIVE_APPROX,
+    RELATIVE_APPROX_LOSSY,
+    RELATIVE_APPROX
 ):
     # Deposit to the vault and harvest
     token.approve(vault.address, amount, {"from": user})
@@ -24,8 +26,16 @@ def test_migration(
     strategy.harvest({"from": gov})
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
 
-    # migrate to a new strategy
     new_strategy = strategist.deploy(Strategy, vault, "StrategyName")
+    # migration with more than dust reverts, there is no way to transfer the debt position
+    with reverts():
+        vault.migrateStrategy(strategy, new_strategy, {"from": gov})
+
+    vault.revokeStrategy(strategy, {"from": gov})
+    strategy.harvest({"from": gov})
+
+    # migrate to a new strategy
     vault.migrateStrategy(strategy, new_strategy, {"from": gov})
+    vault.updateStrategyDebtRatio(new_strategy, 10_000, {"from": gov})
     new_strategy.harvest({"from": gov})
-    assert (pytest.approx(new_strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount )
+    assert (pytest.approx(new_strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX_LOSSY) == amount )

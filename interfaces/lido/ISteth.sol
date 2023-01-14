@@ -9,5 +9,5 @@ interface ISteth is IERC20 {
     //function getSharesByPooledEth(uint256 _pooledEthAmount) external view returns (uint256);
     event Submitted(address sender, uint256 amount, address referral);
     function submit(address) external payable returns (uint256);
-
+    function isStakingPaused() external returns (bool);
 }

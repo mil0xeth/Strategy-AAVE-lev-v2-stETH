@@ -11,7 +11,6 @@ import "../interfaces/yearn/IVault.sol";
 
 import "../interfaces/lido/ISteth.sol";
 import "../interfaces/curve/Curve.sol";
-import "../interfaces/chainlink/AggregatorInterface.sol";
 
 import "../interfaces/aave/ILendingPool.sol";
 import "../interfaces/aave/IProtocolDataProvider.sol";
@@ -28,9 +27,6 @@ contract Strategy is BaseStrategy {
     ISteth internal constant yieldBearing =  ISteth(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
     //WETH is borrowToken:
     IERC20 internal constant borrowToken = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-
-    // Use Chainlink oracle to obtain latest want/ETH price
-    AggregatorInterface public chainlinkYieldBearingToETHPriceFeed;
 
     //AAVEV2 lending pool:
     ILendingPool private constant lendingPool = ILendingPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
@@ -50,6 +46,8 @@ contract Strategy is BaseStrategy {
     // Units used in Maker contracts
     uint256 internal constant WAD = 10**18;
     uint256 internal constant RAY = 10**27;
+
+    uint256 internal constant COLLATERAL_DUST = 10;
 
     //Desired collaterization ratio
     //Directly affects the leverage multiplier for every investment to leverage up the Maker vault with yieldBearing: 
@@ -103,14 +101,11 @@ contract Strategy is BaseStrategy {
     ) internal {
         strategyName = _strategyName;
 
-        //chainlinkYieldBearingToETHPriceFeed = AggregatorInterface(_chainlinkYieldBearingToETHPriceFeed);
-        chainlinkYieldBearingToETHPriceFeed = AggregatorInterface(0x86392dC19c0b719886221c78AB11eb8Cf5c52812);
-
         //10M$ dai or usdc maximum trade
         maxSingleTrade = 5_000 * 1e18;
         //10M$ dai or usdc maximum trade
         //minSingleTrade = 1 * 1e17;
-        minSingleTrade = 1 * 1e10;
+        minSingleTrade = 1 * 1e15;
 
         creditThreshold = 1e3 * 1e18;
         maxReportDelay = 21 days; // 21 days in seconds, if we hit this then harvestTrigger = True
@@ -120,8 +115,8 @@ contract Strategy is BaseStrategy {
 
         // Current ratio can drift
         // Allow additional 20 BPS = 0.002 = 0.2% in any direction by default ==> 102.5% upper, 102.1% lower
-        upperRebalanceTolerance = (500 * WAD) / 10000;
-        lowerRebalanceTolerance = (500 * WAD) / 10000;
+        upperRebalanceTolerance = (1000 * WAD) / 10000;
+        lowerRebalanceTolerance = (1000 * WAD) / 10000;
 
         // Minimum collateralization ratio for GUNIV3DAIUSDC is 102.3% == 10230 BPS
         //collateralizationRatio = (10230 * WAD) / 10000;
@@ -132,16 +127,6 @@ contract Strategy is BaseStrategy {
         ( , , address _debtToken) = protocolDataProvider.getReserveTokensAddresses(address(borrowToken));
         aToken = IAToken(_aToken);
         debtToken = IVariableDebtToken(_debtToken);
-
-        // Let collateral targets
-        //(uint256 ltv, uint256 liquidationThreshold) = getProtocolCollatRatios(address(want));
-        //targetCollatRatio = liquidationThreshold.sub(DEFAULT_COLLAT_TARGET_MARGIN);
-        //maxCollatRatio = liquidationThreshold.sub(DEFAULT_COLLAT_MAX_MARGIN);
-        //maxBorrowCollatRatio = ltv.sub(DEFAULT_COLLAT_MAX_MARGIN);
-        //(uint256 daiLtv, ) = getProtocolCollatRatios(dai);
-        //daiBorrowCollatRatio = daiLtv.sub(DEFAULT_COLLAT_MAX_MARGIN);
-        //DECIMALS = 10**vault.decimals();
-
     }
 
 
@@ -218,7 +203,7 @@ contract Strategy is BaseStrategy {
         external
         onlyVaultManagers
     {
-        MakerDaiDelegateLib.unwind(repayAmountOfWant, getCurrentCollRatio(), address(aToken), address(debtToken));
+        MakerDaiDelegateLib.unwind(repayAmountOfWant, collateralizationRatio, address(aToken), address(debtToken));
     }
 
     // ******** OVERRIDEN METHODS FROM BASE CONTRACT ************
@@ -270,7 +255,7 @@ contract Strategy is BaseStrategy {
         // Here minSingleTrade represents the minimum investment of want that makes it worth it to loop 
         if (balanceOfWant() > _debtOutstanding.add(minSingleTrade) ) {
             MakerDaiDelegateLib.wind(Math.min(maxSingleTrade, balanceOfWant().sub(_debtOutstanding)), collateralizationRatio, address(debtToken));
-        } else {
+        } else if (balanceOfDebt() > 0) {
             //Check if collateralizationRatio needs adjusting
             // Allow the ratio to move a bit in either direction to avoid cycles
             uint256 currentRatio = getCurrentCollRatio();
@@ -374,7 +359,7 @@ contract Strategy is BaseStrategy {
         returns (bool)
     {
         // Nothing to adjust if there is no collateral locked
-        if (balanceOfCollateral() == 0) {
+        if (balanceOfCollateral() < COLLATERAL_DUST) {
             return false;
         }
 
@@ -393,7 +378,11 @@ contract Strategy is BaseStrategy {
     }
 
     function prepareMigration(address _newStrategy) internal override 
-    {}
+    {
+        require(balanceOfDebt() == 0, "cannot migrate debt position");
+        MakerDaiDelegateLib.withdrawCollateral(balanceOfCollateral());
+        yieldBearing.transfer(_newStrategy, balanceOfYieldBearing());
+    }
 
     function protectedTokens()
         internal
@@ -428,7 +417,7 @@ contract Strategy is BaseStrategy {
         uint256 amount = amounts[0];
         _checkAllowance(balancer, address(borrowToken), amount.add(fee));
         if (action == Action.WIND) {
-            MakerDaiDelegateLib._wind(amount.add(fee), _wantAmountInitialOrRequested, _collateralizationRatio);
+            MakerDaiDelegateLib._wind(amount, amount.add(fee), _wantAmountInitialOrRequested, _collateralizationRatio);
         } else if (action == Action.UNWIND) {
             //amount = flashloanAmount, amount.add(fee) = flashloanAmount+fee for flashloan (usually 0)
             MakerDaiDelegateLib._unwind(amount, amount.add(fee), _wantAmountInitialOrRequested, _collateralizationRatio, address(aToken), address(debtToken));
@@ -452,7 +441,6 @@ contract Strategy is BaseStrategy {
         }
     }
 
-
     // ----------------- PUBLIC BALANCES AND CALCS -----------------
     function balanceOfWant() public view returns (uint256) {
         return want.balanceOf(address(this));
@@ -464,7 +452,7 @@ contract Strategy is BaseStrategy {
 
     //get amount of Want in Wei that is received for 1 yieldBearing
     function getWantPerYieldBearing() public view returns (uint256){
-        return uint256(chainlinkYieldBearingToETHPriceFeed.latestAnswer());
+        return WAD.mul(_getTokenPriceInETH(address(borrowToken))).div(_getTokenPriceInETH(address(yieldBearing)));
     }
 
     function balanceOfDebt() public view returns (uint256) {
@@ -503,7 +491,6 @@ contract Strategy is BaseStrategy {
 
     function _getCurrentPessimisticRatio(uint256 price) internal view returns (uint256) {
         // Use pessimistic price to determine the worst ratio possible
-        //uint256 externalPrice = WAD.mul(_getTokenPriceInETH(address(borrowToken))).div(_getTokenPriceInETH(address(yieldBearing)));
         //price = Math.min(price, externalPrice);
         require(price > 0); // dev: invalid price
 

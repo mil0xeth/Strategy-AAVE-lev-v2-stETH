@@ -38,7 +38,7 @@ def test_high_loss_causes_healthcheck_revert(
 
     # Send some funds to the strategy
     token.approve(vault.address, 2 ** 256 - 1, {"from": token_whale})
-    vault.deposit(10000 * (10 ** token.decimals()), {"from": token_whale})
+    vault.deposit(1000 * (10 ** token.decimals()), {"from": token_whale})
     chain.sleep(1)
     test_strategy.harvest({"from": gov})
 

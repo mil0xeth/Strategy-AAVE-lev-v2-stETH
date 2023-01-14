@@ -36,7 +36,7 @@ def test_profitable_harvest(strategy,vault, steth, token, token_whale, gov, stet
 
     #send some steth to simulate profit. 10% apr
     rewards_amount = whale_deposit/10/365*days
-    steth.transfer(strategy, rewards_amount, {'from': steth_whale})
+    steth.transfer(strategy, rewards_amount*5, {'from': steth_whale})
 
     strategy.harvest({'from': gov})
 

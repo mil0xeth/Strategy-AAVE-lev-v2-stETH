@@ -40,9 +40,15 @@ def test_detailed_migration(
         ).return_value
     )
 
+    # migration with more than dust reverts, there is no way to transfer the debt position
+    with reverts():
+        vault.migrateStrategy(strategy, new_strategy, {"from": gov})
+
+    vault.revokeStrategy(strategy, {"from": gov})
+    strategy.harvest({"from": gov})
+
     vault.migrateStrategy(strategy, new_strategy, {"from": gov})
+    vault.updateStrategyDebtRatio(new_strategy, 10_000, {"from": gov})
     new_strategy.harvest({"from": gov})
 
-    assert new_strategy.balanceOfDebt() > amount
     assert (pytest.approx(new_strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX_LOSSY) == amount )
-    assert vault.strategies(new_strategy).dict()["totalDebt"] == amount

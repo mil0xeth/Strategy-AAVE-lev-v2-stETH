@@ -16,8 +16,6 @@ import "../../interfaces/aave/ILendingPool.sol";
 import "../../interfaces/aave/IProtocolDataProvider.sol";
 import "../../interfaces/aave/IPriceOracle.sol";
 
-import "../../interfaces/chainlink/AggregatorInterface.sol";
-
 import "../../interfaces/UniswapInterfaces/IWETH.sol";
 
 import "../../interfaces/lido/ISteth.sol";
@@ -39,7 +37,6 @@ library MakerDaiDelegateLib {
     enum Action {WIND, UNWIND}
 
     //Strategy specific addresses:
-    //IERC20 internal constant want = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2); //weth
     IWETH internal constant want = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
     //stETH is yieldBearing:
@@ -49,9 +46,6 @@ library MakerDaiDelegateLib {
     
     //Curve:
     ICurveFi internal constant curve = ICurveFi(0xDC24316b9AE028F1497c275EB9192a3Ea0f67022);
-
-    //Chainlink Oracle:
-    AggregatorInterface internal constant chainlinkYieldBearingToETHPriceFeed = AggregatorInterface(0x86392dC19c0b719886221c78AB11eb8Cf5c52812);
 
     //AAVEV2 lending pool:
     ILendingPool private constant lendingPool = ILendingPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
@@ -74,6 +68,8 @@ library MakerDaiDelegateLib {
     // Do not attempt to mint DAI if there are less than MIN_MINTABLE available. Used to be 500kDAI --> reduced to 50kDAI
     uint256 internal constant MIN_MINTABLE = 50000 * WAD;
 
+    uint256 internal constant COLLATERAL_DUST = 10;
+
     // ----------------- PUBLIC FUNCTIONS -----------------
 
     // Liquidation ratio for the given ilk returned in [ray]
@@ -88,14 +84,15 @@ library MakerDaiDelegateLib {
         uint256 targetCollateralizationRatio,
         address debtToken
     ) public {
-        wantAmountInitial = Math.min(wantAmountInitial, balanceOfWant());
+        if (wantAmountInitial < COLLATERAL_DUST) {
+            return;
+        }
         //Calculate how much borrowToken to mint to leverage up to targetCollateralizationRatio:
         uint256 flashloanAmount = wantAmountInitial.mul(RAY).div(targetCollateralizationRatio.mul(1e9).sub(RAY));
         //Retrieve upper max limit of flashloan:
-        //uint256 flashloanMaximum = flashmint.maxFlashLoan(address(borrowToken));
+        uint256 flashloanMaximum = borrowToken.balanceOf(address(balancer));
         //Cap flashloan only up to maximum allowed:
-        //flashloanAmount = Math.min(flashloanAmount, flashloanMaximum);
-        uint256 currentDebt = _debtForCdp(debtToken);
+        flashloanAmount = Math.min(flashloanAmount, flashloanMaximum);
         bytes memory data = abi.encode(Action.WIND, wantAmountInitial, flashloanAmount, targetCollateralizationRatio); 
         _initFlashLoan(data, flashloanAmount);
     }
@@ -106,22 +103,21 @@ library MakerDaiDelegateLib {
         address aToken,
         address debtToken
     ) public {
-        if (_balanceOfCdp(aToken) == 0){
+        if (_balanceOfCdp(aToken) < COLLATERAL_DUST){
             return;
         }
         //Retrieve for upper max limit of flashloan:
-        //uint256 flashloanMaximum = flashmint.maxFlashLoan(address(borrowToken));
+        uint256 flashloanMaximum = borrowToken.balanceOf(address(balancer));
         //flashloan only up to maximum allowed:
-        //uint256 flashloanAmount = Math.min(_debtForCdp(debtToken), flashloanMaximum);
-        uint256 flashloanAmount = _debtForCdp(debtToken);
+        uint256 flashloanAmount = Math.min(_debtForCdp(debtToken), flashloanMaximum);
         bytes memory data = abi.encode(Action.UNWIND, wantAmountRequested, flashloanAmount, targetCollateralizationRatio);
         //Always flashloan entire debt to pay off entire debt:
         _initFlashLoan(data, flashloanAmount);
     }
 
-    function _wind(uint256 flashloanRepayAmount, uint256 wantAmountInitial, uint256) external {
+    function _wind(uint256 flashloanAmount, uint256 flashloanRepayAmount, uint256 wantAmountInitial, uint256) external {
         //repayAmount includes any fees
-        uint256 yieldBearingAmountToLock = _swapWantToYieldBearing(balanceOfWant());
+        uint256 yieldBearingAmountToLock = _swapWantToYieldBearing(wantAmountInitial.add(flashloanAmount));
         //Lock collateral and borrow borrowToken to repay flashloan
         _depositCollateral(yieldBearingAmountToLock);
         _borrowBorrowToken(flashloanRepayAmount);
@@ -134,7 +130,10 @@ library MakerDaiDelegateLib {
         //Calculate leverage+1 to know how much totalRequestedInYieldBearing to swap for borrowToken
         uint256 leveragePlusOne = (RAY.mul(WAD).div((targetCollateralizationRatio.mul(1e9).sub(RAY)))).add(WAD);
         uint256 totalRequestedInYieldBearing = wantAmountRequested.mul(leveragePlusOne).div(getWantPerYieldBearing());
-        uint256 collateralBalance = _balanceOfCdp(aToken);
+        if (balanceOfYieldBearing() > COLLATERAL_DUST){
+            _depositCollateral(balanceOfYieldBearing());
+        }
+        uint256 collateralBalance = _balanceOfCdp(aToken); //2 wei of collateral remains
         //Maximum of all collateral can be requested
         totalRequestedInYieldBearing = Math.min(totalRequestedInYieldBearing, collateralBalance);
         //Check allowance for repaying borrowToken Debt
@@ -146,26 +145,33 @@ library MakerDaiDelegateLib {
 
         //Now mint dai to repay flashloan: Rest of collateral is already locked, borrow dai equivalent to amount given by targetCollateralizationRatio:
         collateralBalance = _balanceOfCdp(aToken);
-        //In case not all debt was paid down, the remainingDebt is not 0
-        uint256 remainingDebt = _debtForCdp(debtToken); //necessarily less in value than collateralBalance due to overcollateralization of cdp
-        //Calculate how much more borrowToken to borrow to attain desired targetCollateralizationRatio:
-        uint256 borrowTokenAmountToBorrow = collateralBalance.mul(getWantPerYieldBearing()).div(targetCollateralizationRatio).sub(remainingDebt);
+        //Is there collateral to take debt?
+        if (collateralBalance > COLLATERAL_DUST){
+            //In case not all debt was paid down, the remainingDebt is not 0
+            uint256 remainingDebt = _debtForCdp(debtToken); //necessarily less in value than collateralBalance due to overcollateralization of cdp
+            //Calculate how much more borrowToken to borrow to attain desired targetCollateralizationRatio:
+            uint256 borrowTokenAmountToBorrow = collateralBalance.mul(getWantPerYieldBearing()).div(targetCollateralizationRatio).sub(remainingDebt);
 
-        //Make sure to always mint enough to repay the flashloan
-        uint256 wantBalance = balanceOfWant();
-        if (flashloanRepayAmount > wantBalance){
-            borrowTokenAmountToBorrow = Math.max(borrowTokenAmountToBorrow, flashloanRepayAmount.sub(wantBalance));
-        }        
-        //borrow borrowToken to repay flashloan
-        _borrowBorrowToken(borrowTokenAmountToBorrow);
+            //Make sure to always mint enough to repay the flashloan
+            uint256 wantBalance = balanceOfWant();
+            if (flashloanRepayAmount > wantBalance){
+                borrowTokenAmountToBorrow = Math.max(borrowTokenAmountToBorrow, flashloanRepayAmount.sub(wantBalance));
+            }
+            //borrow borrowToken to repay flashloan
+            _borrowBorrowToken(borrowTokenAmountToBorrow);
+        }
 
         //repay flashloan:
         borrowToken.transfer(address(balancer), flashloanRepayAmount);
     }
 
+    function _getTokenPriceInETH(address _token) internal view returns (uint256){
+        return WAD.mul(WAD).div(priceOracle.getAssetPrice(_token));
+    }
+
     //get amount of Want in Wei that is received for 1 yieldBearing
-    function getWantPerYieldBearing() internal view returns (uint256){
-        return uint256(chainlinkYieldBearingToETHPriceFeed.latestAnswer());
+    function getWantPerYieldBearing() public view returns (uint256){
+        return WAD.mul(_getTokenPriceInETH(address(borrowToken))).div(_getTokenPriceInETH(address(yieldBearing)));
     }
 
     function balanceOfWant() internal view returns (uint256) {
@@ -207,12 +213,11 @@ library MakerDaiDelegateLib {
         if (_amount == 0) {
             return 0;
         }
-        _amount = Math.min(_amount, balanceOfWant());
         //---WETH (ethwrapping withdraw) --> ETH --- Unwrap WETH to ETH (to be used in Curve or Lido)
         want.withdraw(_amount);  
         _amount = address(this).balance;        
         //---ETH test if mint on Lido or buy on Curve --> STETH --- 
-        if (curve.get_dy(0, 1, _amount) <= _amount){
+        if (yieldBearing.isStakingPaused() == false && curve.get_dy(0, 1, _amount) <= _amount){
             //Lido mint: 
             yieldBearing.submit{value: _amount}(lidoReferral);
         }else{ 
@@ -254,26 +259,27 @@ library MakerDaiDelegateLib {
     }
 
     function _depositCollateral(uint256 _amount) internal {
-        if (_amount == 0) return;
+        _amount = Math.min(balanceOfYieldBearing(), _amount);
+        if (_amount < COLLATERAL_DUST) return;
         _checkAllowance(address(lendingPool), address(yieldBearing), _amount);
         lendingPool.deposit(address(yieldBearing), _amount, address(this), aaveReferral);
     }
 
     function _withdrawCollateral(uint256 _amount) internal {
-        if (_amount == 0) return;
+        if (_amount < COLLATERAL_DUST) return;
         lendingPool.withdraw(address(yieldBearing), _amount, address(this));
     }
 
-    function _repayBorrowToken(uint256 amount) internal returns (uint256) {
-        if (amount == 0) return 0;
+    function _repayBorrowToken(uint256 amount) internal {
+        if (amount == 0) return;
         _checkAllowance(address(lendingPool), address(borrowToken), amount);
-        return lendingPool.repay(address(borrowToken), amount, 2, address(this));
+        lendingPool.repay(address(borrowToken), amount, 2, address(this));
     }
 
-    function _borrowBorrowToken(uint256 amount) internal returns (uint256) {
-        if (amount == 0) return 0;
+    function _borrowBorrowToken(uint256 amount) internal {
+        if (amount == 0) return;
+        lendingPool.setUserUseReserveAsCollateral(address(yieldBearing), true);
         lendingPool.borrow(address(borrowToken), amount, 2, aaveReferral, address(this));
-        return amount;
     }
 
     function depositCollateral(uint256 _amount) external {
