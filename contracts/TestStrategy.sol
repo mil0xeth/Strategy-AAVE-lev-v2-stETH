@@ -47,7 +47,7 @@ contract TestStrategy is Strategy {
     }
 
     function freeCollateral(uint256 collateralAmount, uint256 daiAmount) public {
-        return MakerDaiDelegateLib._withdrawCollateral(collateralAmount);
+        return MarketLib._withdrawCollateral(collateralAmount);
     }
 /*
     function repayDebt(uint256 _amount) public {

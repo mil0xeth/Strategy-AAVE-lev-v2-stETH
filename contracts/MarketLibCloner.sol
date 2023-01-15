@@ -4,7 +4,7 @@ pragma experimental ABIEncoderV2;
 
 import "./Strategy.sol";
 
-contract MakerDaiDelegateCloner {
+contract MarketLibCloner {
     using SafeERC20 for IERC20;
     address public immutable original;
 
@@ -47,7 +47,7 @@ contract MakerDaiDelegateCloner {
         );
     }
 
-    function cloneMakerDaiDelegate(
+    function cloneMarketLib(
         address _vault,
         address _strategist,
         address _rewards,
@@ -95,6 +95,6 @@ contract MakerDaiDelegateCloner {
     }
 
     function name() external pure returns (string memory) {
-        return "Yearn-MakerDaiDelegateCloner";
+        return "Yearn-MarketLibCloner";
     }
 }

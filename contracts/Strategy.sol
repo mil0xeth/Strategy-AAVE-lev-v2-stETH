@@ -5,7 +5,7 @@ pragma experimental ABIEncoderV2;
 import {BaseStrategy,StrategyParams} from "@yearnvaults/contracts/BaseStrategy.sol";
 import "@openzeppelin/contracts/math/Math.sol";
 import {IERC20,Address} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
-import "./libraries/MakerDaiDelegateLib.sol";
+import "./libraries/MarketLib.sol";
 import "../interfaces/yearn/IBaseFee.sol";
 import "../interfaces/yearn/IVault.sol";
 
@@ -42,15 +42,14 @@ contract Strategy is BaseStrategy {
     //Balancer Flashloan:
     address internal constant balancer = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
 
-    //----------- MAKER INIT    
-    // Units used in Maker contracts
+    // Decimal Units
     uint256 internal constant WAD = 10**18;
     uint256 internal constant RAY = 10**27;
 
     uint256 internal constant COLLATERAL_DUST = 10;
 
     //Desired collaterization ratio
-    //Directly affects the leverage multiplier for every investment to leverage up the Maker vault with yieldBearing: 
+    //Directly affects the leverage multiplier for every investment to leverage up with yieldBearing: 
     //Off-chain calculation geometric converging series: sum(1/1.02^n)-1 for n=0-->infinity --> for 102% collateralization ratio = 50x leverage.
     uint256 public collateralizationRatio;
 
@@ -161,7 +160,7 @@ contract Strategy is BaseStrategy {
         external
         onlyVaultManagers
     {
-        require(_collateralizationRatio.sub(lowerRebalanceTolerance) > MakerDaiDelegateLib.getLiquidationRatio().mul(WAD).div(RAY)); // dev: desired collateralization ratio is too low
+        require(_collateralizationRatio.sub(lowerRebalanceTolerance) > MarketLib.getLiquidationRatio().mul(WAD).div(RAY)); // dev: desired collateralization ratio is too low
         collateralizationRatio = _collateralizationRatio;
     }
 
@@ -170,7 +169,7 @@ contract Strategy is BaseStrategy {
         external
         onlyVaultManagers
     {
-        require(collateralizationRatio.sub(_lowerRebalanceTolerance) > MakerDaiDelegateLib.getLiquidationRatio().mul(WAD).div(RAY)); // dev: desired rebalance tolerance makes allowed ratio too low
+        require(collateralizationRatio.sub(_lowerRebalanceTolerance) > MarketLib.getLiquidationRatio().mul(WAD).div(RAY)); // dev: desired rebalance tolerance makes allowed ratio too low
         lowerRebalanceTolerance = _lowerRebalanceTolerance;
         upperRebalanceTolerance = _upperRebalanceTolerance;
     }
@@ -184,18 +183,18 @@ contract Strategy is BaseStrategy {
         wantBalance = Math.min(wantBalance, balanceOfDebt());
         repayAmountOfCollateral = Math.min(repayAmountOfCollateral, balanceOfCollateral());
         //free collateral and pay down debt with free want:
-        MakerDaiDelegateLib.repayBorrowToken(wantBalance);
-        MakerDaiDelegateLib.withdrawCollateral(repayAmountOfCollateral);
+        MarketLib.repayBorrowToken(wantBalance);
+        MarketLib.withdrawCollateral(repayAmountOfCollateral);
         //Desired collateral amount unlocked --> swap to want
-        MakerDaiDelegateLib.swapYieldBearingToWant(repayAmountOfCollateral);
+        MarketLib.swapYieldBearingToWant(repayAmountOfCollateral);
         //Pay down debt with freed collateral that was swapped to want:
         wantBalance = balanceOfWant();
         wantBalance = Math.min(wantBalance, balanceOfDebt());
-        MakerDaiDelegateLib.repayBorrowToken(wantBalance);
+        MarketLib.repayBorrowToken(wantBalance);
         //If all debt is paid down, free all collateral and swap to want:
         if (balanceOfDebt() == 0){
-            MakerDaiDelegateLib.withdrawCollateral(balanceOfCollateral());
-            MakerDaiDelegateLib.swapYieldBearingToWant(balanceOfYieldBearing());
+            MarketLib.withdrawCollateral(balanceOfCollateral());
+            MarketLib.swapYieldBearingToWant(balanceOfYieldBearing());
         }
     }
 
@@ -203,7 +202,7 @@ contract Strategy is BaseStrategy {
         external
         onlyVaultManagers
     {
-        MakerDaiDelegateLib.unwind(repayAmountOfWant, collateralizationRatio, address(aToken), address(debtToken));
+        MarketLib.unwind(repayAmountOfWant, collateralizationRatio, address(aToken), address(debtToken));
     }
 
     // ******** OVERRIDEN METHODS FROM BASE CONTRACT ************
@@ -254,7 +253,7 @@ contract Strategy is BaseStrategy {
         // If we have enough want to convert and deposit more into aave, we do it
         // Here minSingleTrade represents the minimum investment of want that makes it worth it to loop 
         if (balanceOfWant() > _debtOutstanding.add(minSingleTrade) ) {
-            MakerDaiDelegateLib.wind(Math.min(maxSingleTrade, balanceOfWant().sub(_debtOutstanding)), collateralizationRatio, address(debtToken));
+            MarketLib.wind(Math.min(maxSingleTrade, balanceOfWant().sub(_debtOutstanding)), collateralizationRatio, address(debtToken));
         } else if (balanceOfDebt() > 0) {
             //Check if collateralizationRatio needs adjusting
             // Allow the ratio to move a bit in either direction to avoid cycles
@@ -263,11 +262,11 @@ contract Strategy is BaseStrategy {
                 uint256 currentCollateral = balanceOfCollateral();
                 uint256 yieldBearingToRepay = currentCollateral.sub( currentCollateral.mul(currentRatio).div(collateralizationRatio)  );
                 uint256 wantAmountToRepay = yieldBearingToRepay.mul(getWantPerYieldBearing()).div(WAD);
-                MakerDaiDelegateLib.unwind(Math.min(wantAmountToRepay, maxSingleTrade), collateralizationRatio, address(aToken), address(debtToken));
+                MarketLib.unwind(Math.min(wantAmountToRepay, maxSingleTrade), collateralizationRatio, address(aToken), address(debtToken));
             } else if (currentRatio > collateralizationRatio.add(upperRebalanceTolerance)) { //if current ratio is ABOVE goal ratio:
                 // Borrow the maximum borrowToken amount possible for the deposited collateral            
                 _depositCollateralAndBorrow(0, _borrowTokenAmountToBorrow(balanceOfCollateral()).sub(balanceOfDebt()));
-                MakerDaiDelegateLib.wind(Math.min(maxSingleTrade, balanceOfWant().sub(_debtOutstanding)), collateralizationRatio, address(debtToken));
+                MarketLib.wind(Math.min(maxSingleTrade, balanceOfWant().sub(_debtOutstanding)), collateralizationRatio, address(debtToken));
             }
         }
         //Check safety of collateralization ratio after all actions:
@@ -290,7 +289,7 @@ contract Strategy is BaseStrategy {
             return (_wantAmountNeeded, 0);
         }
         //Not enough want to pay _wantAmountNeeded --> unwind position
-        MakerDaiDelegateLib.unwind(_wantAmountNeeded.sub(wantBalance), collateralizationRatio, address(aToken), address(debtToken));
+        MarketLib.unwind(_wantAmountNeeded.sub(wantBalance), collateralizationRatio, address(aToken), address(debtToken));
 
         //update free want after liquidating
         wantBalance = balanceOfWant();
@@ -380,7 +379,7 @@ contract Strategy is BaseStrategy {
     function prepareMigration(address _newStrategy) internal override 
     {
         require(balanceOfDebt() == 0, "cannot migrate debt position");
-        MakerDaiDelegateLib.withdrawCollateral(balanceOfCollateral());
+        MarketLib.withdrawCollateral(balanceOfCollateral());
         yieldBearing.transfer(_newStrategy, balanceOfYieldBearing());
     }
 
@@ -417,10 +416,10 @@ contract Strategy is BaseStrategy {
         uint256 amount = amounts[0];
         _checkAllowance(balancer, address(borrowToken), amount.add(fee));
         if (action == Action.WIND) {
-            MakerDaiDelegateLib._wind(amount, amount.add(fee), _wantAmountInitialOrRequested, _collateralizationRatio);
+            MarketLib._wind(amount, amount.add(fee), _wantAmountInitialOrRequested, _collateralizationRatio);
         } else if (action == Action.UNWIND) {
             //amount = flashloanAmount, amount.add(fee) = flashloanAmount+fee for flashloan (usually 0)
-            MakerDaiDelegateLib._unwind(amount, amount.add(fee), _wantAmountInitialOrRequested, _collateralizationRatio, address(aToken), address(debtToken));
+            MarketLib._unwind(amount, amount.add(fee), _wantAmountInitialOrRequested, _collateralizationRatio, address(aToken), address(debtToken));
         }
     }
 
@@ -481,8 +480,8 @@ contract Strategy is BaseStrategy {
         uint256 collateralAmount,
         uint256 borrowAmount
     ) internal {
-        MakerDaiDelegateLib.depositCollateral(collateralAmount);
-        MakerDaiDelegateLib.borrowBorrowToken(borrowAmount);
+        MarketLib.depositCollateral(collateralAmount);
+        MarketLib.borrowBorrowToken(borrowAmount);
     }
 
     function _getTokenPriceInETH(address _token) internal view returns (uint256){

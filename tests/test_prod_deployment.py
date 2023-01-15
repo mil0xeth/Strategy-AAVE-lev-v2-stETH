@@ -5,16 +5,16 @@ from eth_abi import encode_single
 
 
 def test_prod(
-    healthCheck, productionVault, yieldBearing, token, weth, dai, strategist, token_whale, dai_whale, MakerDaiDelegateClonerChoice, Strategy, steth_whale, steth
+    healthCheck, productionVault, yieldBearing, token, weth, dai, strategist, token_whale, dai_whale, MarketLibClonerChoice, Strategy, steth_whale, steth
 ):
 
     vault = productionVault
     gov = vault.governance()
 
     cloner = strategist.deploy(
-        MakerDaiDelegateClonerChoice,
+        MarketLibClonerChoice,
         vault,
-        "Strategy-Maker-lev-GUNIV3DAIUSDC",
+        "Strategy",
     )
 
     original_strategy_address = history[-1].events["Deployed"]["original"]

@@ -18,7 +18,7 @@ def test_double_init_should_revert(
     ilk_want,
     ilk_yieldBearing
 ):
-    clone_tx = cloner.cloneMakerDaiDelegate(
+    clone_tx = cloner.cloneMarketLib(
         vault,
         strategist,
         strategist,
@@ -84,7 +84,7 @@ def test_clone(
     ilk_want,
     ilk_yieldBearing
 ):
-    clone_tx = cloner.cloneMakerDaiDelegate(
+    clone_tx = cloner.cloneMarketLib(
         vault,
         strategist,
         strategist,
@@ -146,7 +146,7 @@ def DEACTIVATED_clone_of_clone(strategy, cloner, yvault, strategist, token, osmP
     chainlinkUNIToETH = Contract("0xD6aA3D25116d8dA79Ea0246c4826EB951872e02e")
     sushiswap = Contract("0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F")
 
-    clone_tx = cloner.cloneMakerDaiDelegate(
+    clone_tx = cloner.cloneMarketLib(
         yVaultUNI,
         strategist,
         strategist,

@@ -5,15 +5,15 @@ from brownie import config, convert, interface, Contract
 #Decide on Strategy Contract
 @pytest.fixture(autouse=True)
 def StrategyChoice(Strategy):    
-    choice = Strategy #Strategy = maker-eth-dai-delegator, NewStrategy = maker-wsteth-dai-lev 
+    choice = Strategy
     yield choice
 @pytest.fixture(autouse=True)
 def TestStrategyChoice(TestStrategy):    
     choice = TestStrategy #TestStrategy, NewTestStrategy
     yield choice
 @pytest.fixture(autouse=True)
-def MakerDaiDelegateClonerChoice(MakerDaiDelegateCloner):    
-    choice = MakerDaiDelegateCloner 
+def MarketLibClonerChoice(MarketLibCloner):    
+    choice = MarketLibCloner 
     yield choice
 #######################################################
 #Decide on wantToken = token
@@ -195,8 +195,8 @@ def isolation(fn_isolation):
     pass
 
 @pytest.fixture(autouse=True)
-def lib(gov, MakerDaiDelegateLib):
-    yield MakerDaiDelegateLib.deploy({"from": gov})
+def lib(gov, MarketLib):
+    yield MarketLib.deploy({"from": gov})
 
 @pytest.fixture
 def gov(accounts):
@@ -381,10 +381,10 @@ def cloner(
     token,
     yieldBearing,
    # price_oracle_want_to_eth,
-    MakerDaiDelegateClonerChoice,
+    MarketLibClonerChoice,
 ):
     cloner = strategist.deploy(
-        MakerDaiDelegateClonerChoice,
+        MarketLibClonerChoice,
         vault,
         "Strategy-AAVE-lev-v2-stETH",
         #ilk_want,

@@ -46,8 +46,6 @@ def test_liquidate_more_than_we_have_should_report_loss(
 # to unlock the whole collateral without a loss.
 # If leaveDebtBehind is false (default) then the strategy will need to unlock a bit
 # of collateral and sell it for DAI in order to pay back the debt.
-# We expect the recovered collateral to be a bit less than the deposited amount
-# due to Maker Stability Fees.
 def test_liquidate_position_without_enough_profit_by_selling_want(
     chain, token, vault, test_strategy, user, amount, token_whale, gov
 ):

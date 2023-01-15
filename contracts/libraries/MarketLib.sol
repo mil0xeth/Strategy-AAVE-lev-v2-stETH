@@ -30,7 +30,7 @@ interface IBalancer {
     ) external;
 }
 
-library MakerDaiDelegateLib {
+library MarketLib {
     using SafeERC20 for IERC20;
     using Address for address;
     using SafeMath for uint256;

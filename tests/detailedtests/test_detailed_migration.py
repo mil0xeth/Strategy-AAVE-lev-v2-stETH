@@ -25,7 +25,7 @@ def test_detailed_migration(
 
     # migrate to a new strategy
     new_strategy = Strategy.at(
-        cloner.cloneMakerDaiDelegate(
+        cloner.cloneMarketLib(
             vault,
             strategist,
             strategist,

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from brownie import Strategy, MakerDaiDelegateLib, accounts, config, network, project, web3
+from brownie import Strategy, MarketLib, accounts, config, network, project, web3
 from eth_utils import is_checksum_address
 import click
 
@@ -56,5 +56,5 @@ def main():
     if input("Deploy Strategy? y/[N]: ").lower() != "y":
         return
 
-    lib = MakerDaiDelegateLib.deploy({"from": dev})
-    strategy = Strategy.deploy(vault,  "Strategy-Maker-lev-GUNIV3DAIUSDC-0.01%", {"from": dev}, publish_source=publish_source)
+    lib = MarketLib.deploy({"from": dev})
+    strategy = Strategy.deploy(vault,  "Strategy", {"from": dev}, publish_source=publish_source)
