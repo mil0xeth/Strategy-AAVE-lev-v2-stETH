@@ -42,6 +42,7 @@ def test_revoke_strategy_from_strategy(
 def test_revoke_with_profit(
     token, dai, vault, strategy, token_whale, gov, borrow_token, borrow_whale, Contract, steth_whale, steth
 ):
+    strategy.setMinMaxSingleTrade(strategy.minSingleTrade(), 5000 * (10 ** token.decimals()), {"from": gov})
     token.approve(vault, 2 ** 256 - 1, {"from": token_whale})
     toadd = 2000 * (10 ** token.decimals())
     vault.deposit(toadd, {"from": token_whale})

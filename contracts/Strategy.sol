@@ -33,11 +33,12 @@ contract Strategy is BaseStrategy {
     IProtocolDataProvider private constant protocolDataProvider = IProtocolDataProvider(0x057835Ad21a177dbdd3090bB1CAE03EaCF78Fc6d);
 
     IPriceOracle private constant priceOracle = IPriceOracle(0xA50ba011c48153De246E5192C8f9258A2ba79Ca9);
-    uint16 private constant referral = 7; // Yearn's aave referral code
 
     // Supply and borrow tokens
     IAToken public aToken;
     IVariableDebtToken public debtToken;
+
+    uint256 public maxBorrowRate;
 
     //Balancer Flashloan:
     address internal constant balancer = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
@@ -100,10 +101,12 @@ contract Strategy is BaseStrategy {
     ) internal {
         strategyName = _strategyName;
 
-        //10M$ dai or usdc maximum trade
-        maxSingleTrade = 5_000 * 1e18;
-        //10M$ dai or usdc maximum trade
-        //minSingleTrade = 1 * 1e17;
+        // 4.4% APR maximum acceptable variable borrow rate from lender:
+        maxBorrowRate = 44 * 1e24;
+
+        //1k ETH maximum trade
+        maxSingleTrade = 1_000 * 1e18;
+        //0.001 ETH minimum trade
         minSingleTrade = 1 * 1e15;
 
         creditThreshold = 1e3 * 1e18;
@@ -117,8 +120,7 @@ contract Strategy is BaseStrategy {
         upperRebalanceTolerance = (1000 * WAD) / 10000;
         lowerRebalanceTolerance = (1000 * WAD) / 10000;
 
-        // Minimum collateralization ratio for GUNIV3DAIUSDC is 102.3% == 10230 BPS
-        //collateralizationRatio = (10230 * WAD) / 10000;
+        // Liquidation threshold is 75% ==> minimum collateralization ratio for stETH is 1/75 = 133.33% == 13333 BPS
         collateralizationRatio = (20000 * WAD) / 10000;
 
         // Set aave tokens
@@ -149,6 +151,10 @@ contract Strategy is BaseStrategy {
     function setMinMaxSingleTrade(uint256 _minSingleTrade, uint256 _maxSingleTrade) external onlyVaultManagers {
         minSingleTrade = _minSingleTrade;
         maxSingleTrade = _maxSingleTrade;
+    }
+
+    function setMaxBorrowRate (uint256 _maxBorrowRate) external onlyVaultManagers {
+        maxBorrowRate = _maxBorrowRate;
     }
 
     function setExpectedFlashloanFee(uint256 _expectedFlashloanFee) external onlyVaultManagers {
@@ -229,20 +235,41 @@ contract Strategy is BaseStrategy {
     {
         uint256 totalDebt = vault.strategies(address(this)).totalDebt;
         uint256 totalAssetsAfterProfit = estimatedTotalAssets();
-        //Here minSingleTrade represents the minimum profit of want that should be given back to the vault
-        _profit = totalAssetsAfterProfit > ( totalDebt + minSingleTrade ) 
-            ? totalAssetsAfterProfit.sub(totalDebt)
-            : 0;
         uint256 _amountFreed;
-        (_amountFreed, _loss) = liquidatePosition(_debtOutstanding.add(_profit));
-        _debtPayment = Math.min(_debtOutstanding, _amountFreed);
-        //Net profit and loss calculation
-        if (_loss > _profit) {
-            _loss = _loss.sub(_profit);
-            _profit = 0;
-        } else {
-            _profit = _profit.sub(_loss);
-            _loss = 0;
+        uint256 toWithdraw = _profit.add(_debtOutstanding);
+        //Here minSingleTrade represents the minimum profit of want that should be given back to the vault
+        if (totalAssetsAfterProfit > totalDebt.add(minSingleTrade)){
+            _profit = totalAssetsAfterProfit.sub(totalDebt);
+            toWithdraw = _profit.add(_debtOutstanding);
+            (_amountFreed, _loss) = liquidatePosition(toWithdraw);
+            //Net profit and loss calculation
+            if (_loss > _profit) {
+                _loss = _loss.sub(_profit);
+                _profit = 0;
+            } else {
+                _profit = _profit.sub(_loss);
+                _loss = 0;
+            }
+        } else { //scenario when strategy is in loss:
+            //vault is requesting want back, but strategy is at loss:
+            if (_debtOutstanding >= minSingleTrade) {
+                toWithdraw = _debtOutstanding;
+                (_amountFreed, _loss) = liquidatePosition(toWithdraw);
+            }
+            //report strategy loss to vault accurately:
+            if (totalDebt > totalAssetsAfterProfit) {
+                _loss = _loss.add(totalDebt).sub(totalAssetsAfterProfit);
+            }
+        }
+
+        //profit + _debtOutstanding must be <= wantBalance. Prioritise profit first:
+        uint256 wantBalance = balanceOfWant();
+        if(wantBalance < _profit){
+            _profit = wantBalance;
+        }else if(wantBalance < toWithdraw){
+            _debtPayment = wantBalance.sub(_profit);
+        }else{
+            _debtPayment = _debtOutstanding;
         }
 
         // we're done harvesting, so reset our trigger if we used it
@@ -251,8 +278,10 @@ contract Strategy is BaseStrategy {
 
     function adjustPosition(uint256 _debtOutstanding) internal override {
         // If we have enough want to convert and deposit more into aave, we do it
-        // Here minSingleTrade represents the minimum investment of want that makes it worth it to loop 
-        if (balanceOfWant() > _debtOutstanding.add(minSingleTrade) ) {
+        // Here minSingleTrade represents the minimum investment of want that makes it worth it to loop
+        uint256 initialCollRatio = getCurrentCollRatio();
+        uint256 currentVariableBorrowRate = uint256(lendingPool.getReserveData(address(borrowToken)).currentVariableBorrowRate); //1% borrowing APR = 1e25. Percentage value in wad (1e27)
+        if (currentVariableBorrowRate <= maxBorrowRate && balanceOfWant() > _debtOutstanding.add(minSingleTrade)) {
             MarketLib.wind(Math.min(maxSingleTrade, balanceOfWant().sub(_debtOutstanding)), collateralizationRatio, address(debtToken));
         } else if (balanceOfDebt() > 0) {
             //Check if collateralizationRatio needs adjusting
@@ -271,9 +300,9 @@ contract Strategy is BaseStrategy {
         }
         //Check safety of collateralization ratio after all actions:
         if (balanceOfDebt() > 0) {
-            require(getCurrentCollRatio() > collateralizationRatio.sub(lowerRebalanceTolerance), "unsafe coll. ratio (adjPos)");
+            uint256 currentCollRatio = getCurrentCollRatio();
+            require(currentCollRatio >= initialCollRatio || getCurrentCollRatio() > collateralizationRatio.sub(lowerRebalanceTolerance), "unsafe coll. ratio (adjPos)");
         }
-
     }
 
     function liquidatePosition(uint256 _wantAmountNeeded)
@@ -312,7 +341,9 @@ contract Strategy is BaseStrategy {
         override
         returns (uint256 _amountFreed)
     {
-        (_amountFreed, ) = liquidatePosition(estimatedTotalAssets());
+        uint256 totalAssets = estimatedTotalAssets();
+        require(totalAssets <= maxSingleTrade, "assets>maxSingleTrade");
+        (_amountFreed, ) = liquidatePosition(totalAssets);
     }
 
     function harvestTrigger(uint256 callCostInWei)

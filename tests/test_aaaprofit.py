@@ -52,3 +52,21 @@ def test_profitable_harvest(strategy,vault, steth, token, token_whale, gov, stet
     whale_profit = (token.balanceOf(token_whale) - whalebefore)/1e18
     print("Whale profit: ", whale_profit)
     assert whale_profit > 0
+
+def test_profit_with_low_maxsingletrade(strategy,vault, steth, token, token_whale, gov, RELATIVE_APPROX_LOSSY):
+    token.approve(vault, 2 ** 256 - 1, {"from": token_whale} )
+    whale_deposit = 100 * 10 ** token.decimals()
+    vault.deposit(whale_deposit, {"from": token_whale})
+    # harvest
+    chain.sleep(1)
+    strategy.setDoHealthCheck(False, {"from": gov})
+    strategy.harvest({'from': gov})
+    assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX_LOSSY) == whale_deposit
+    #generate profit:
+    strategy.setMinMaxSingleTrade(strategy.minSingleTrade(), whale_deposit/2, {"from": gov})
+    token.transfer(strategy, 2e18, {"from": token_whale})
+    vault.updateStrategyDebtRatio(strategy, 0, {"from": gov})
+    strategy.harvest({"from": gov})
+    strategy.harvest({"from": gov})
+    strategy.harvest({"from": gov})
+    assert strategy.estimatedTotalAssets() < 0.1 * 10 ** token.decimals()
