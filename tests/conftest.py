@@ -110,9 +110,9 @@ def usdc():
 #def steth_whale(accounts):
 #    yield accounts.at("0x2faf487a4414fe77e2327f0bf4ae2a264a776ad2") 
 
-#@pytest.fixture
-#def wsteth_whale(accounts):
-#    yield accounts.at("0x62e41b1185023bcc14a465d350e1dde341557925") 
+@pytest.fixture
+def wsteth_whale(accounts):
+    yield accounts.at("0x629e7Da20197a5429d30da36E77d06CdF796b71A", force=True)
 
 @pytest.fixture
 def token_whale(accounts, wantNr, dai_whale, weth_whale):

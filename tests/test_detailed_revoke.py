@@ -40,7 +40,7 @@ def test_revoke_strategy_from_strategy(
 
 
 def test_revoke_with_profit(
-    token, dai, vault, strategy, token_whale, gov, borrow_token, borrow_whale, Contract, steth_whale, steth
+    token, dai, vault, strategy, token_whale, gov, borrow_token, borrow_whale, Contract, wsteth_whale, wsteth
 ):
     strategy.setMinMaxSingleTrade(strategy.minSingleTrade(), 5000 * (10 ** token.decimals()), {"from": gov})
     token.approve(vault, 2 ** 256 - 1, {"from": token_whale})
@@ -59,7 +59,7 @@ def test_revoke_with_profit(
     days = 14
     #send some steth to simulate profit. 10% apr
     rewards_amount = toadd/10/365*days
-    steth.transfer(strategy, rewards_amount*2, {'from': steth_whale})
+    wsteth.transfer(strategy, rewards_amount*2, {'from': wsteth_whale})
 
     chain.sleep(1)
 

@@ -9,30 +9,30 @@ import "./libraries/MarketLib.sol";
 import "../interfaces/yearn/IBaseFee.sol";
 import "../interfaces/yearn/IVault.sol";
 
-import "../interfaces/lido/ISteth.sol";
+import "../interfaces/lido/IWsteth.sol";
 import "../interfaces/curve/Curve.sol";
 
-import "../interfaces/aave/ILendingPool.sol";
-import "../interfaces/aave/IProtocolDataProvider.sol";
-import "../../interfaces/aave/IPriceOracle.sol";
-import "../interfaces/aave/IAToken.sol";
-import "../interfaces/aave/IVariableDebtToken.sol";
+import "../interfaces/aave/V3/IPool.sol";
+import "../interfaces/aave/V3/IProtocolDataProvider.sol";
+import "../interfaces/aave/IPriceOracle.sol";
+import "../interfaces/aave/V3/IAtoken.sol";
+import "../interfaces/aave/V3/IVariableDebtToken.sol";
 
 
 contract Strategy is BaseStrategy {
     using Address for address;
     enum Action {WIND, UNWIND}
 
-    //stETH is yieldBearing:
-    ISteth internal constant yieldBearing =  ISteth(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
+    //wstETH is yieldBearing:
+    IWstETH internal constant yieldBearing = IWstETH(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
     //WETH is borrowToken:
     IERC20 internal constant borrowToken = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
     //AAVEV2 lending pool:
-    ILendingPool private constant lendingPool = ILendingPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
-    IProtocolDataProvider private constant protocolDataProvider = IProtocolDataProvider(0x057835Ad21a177dbdd3090bB1CAE03EaCF78Fc6d);
+    IPool private constant lendingPool = IPool(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2);
+    IProtocolDataProvider private constant protocolDataProvider = IProtocolDataProvider(0x7B4EB56E7CD4b454BA8ff71E4518426369a138a3);
 
-    IPriceOracle private constant priceOracle = IPriceOracle(0xA50ba011c48153De246E5192C8f9258A2ba79Ca9);
+    IPriceOracle private constant priceOracle = IPriceOracle(0x54586bE62E3c3580375aE3723C145253060Ca0C2);
 
     // Supply and borrow tokens
     IAToken public aToken;
@@ -65,6 +65,8 @@ contract Strategy is BaseStrategy {
     uint256 public maxSingleTrade;
     // Minimum Single Trade & Minimum Profit to be taken:
     uint256 public minSingleTrade;
+    // Maximum slipapge accepted for curve trades:
+    uint256 private maxSlippage;
 
     //Expected flashloan fee:
     uint256 public expectedFlashloanFee;
@@ -109,6 +111,9 @@ contract Strategy is BaseStrategy {
         //0.001 ETH minimum trade
         minSingleTrade = 1 * 1e15;
 
+        //maximum acceptable slippage in basis points: 100 = 1% 
+        maxSlippage = 200;
+
         creditThreshold = 1e3 * 1e18;
         maxReportDelay = 21 days; // 21 days in seconds, if we hit this then harvestTrigger = True
 
@@ -120,7 +125,7 @@ contract Strategy is BaseStrategy {
         upperRebalanceTolerance = (1000 * WAD) / 10000;
         lowerRebalanceTolerance = (1000 * WAD) / 10000;
 
-        // Liquidation threshold is 75% ==> minimum collateralization ratio for stETH is 1/75 = 133.33% == 13333 BPS
+        // Liquidation threshold with EMode is 93% ==> minimum collateralization ratio for wstETH is 1/93 = 107.52688% == 10753 BPS
         collateralizationRatio = (20000 * WAD) / 10000;
 
         // Set aave tokens
@@ -128,6 +133,9 @@ contract Strategy is BaseStrategy {
         ( , , address _debtToken) = protocolDataProvider.getReserveTokensAddresses(address(borrowToken));
         aToken = IAToken(_aToken);
         debtToken = IVariableDebtToken(_debtToken);
+
+        // Enable EMode for yieldBearing token to improve the liquidation ratio: 1 is ETH-like E-Mode
+        lendingPool.setUserEMode(1);
     }
 
 
@@ -151,6 +159,10 @@ contract Strategy is BaseStrategy {
     function setMinMaxSingleTrade(uint256 _minSingleTrade, uint256 _maxSingleTrade) external onlyVaultManagers {
         minSingleTrade = _minSingleTrade;
         maxSingleTrade = _maxSingleTrade;
+    }
+
+    function setMaxSlippage(uint256 _maxSlippage) external onlyVaultManagers {
+        maxSlippage = _maxSlippage;
     }
 
     function setMaxBorrowRate (uint256 _maxBorrowRate) external onlyVaultManagers {
@@ -192,7 +204,7 @@ contract Strategy is BaseStrategy {
         MarketLib.repayBorrowToken(wantBalance);
         MarketLib.withdrawCollateral(repayAmountOfCollateral);
         //Desired collateral amount unlocked --> swap to want
-        MarketLib.swapYieldBearingToWant(repayAmountOfCollateral);
+        MarketLib.swapYieldBearingToWant(repayAmountOfCollateral, maxSlippage);
         //Pay down debt with freed collateral that was swapped to want:
         wantBalance = balanceOfWant();
         wantBalance = Math.min(wantBalance, balanceOfDebt());
@@ -200,7 +212,7 @@ contract Strategy is BaseStrategy {
         //If all debt is paid down, free all collateral and swap to want:
         if (balanceOfDebt() == 0){
             MarketLib.withdrawCollateral(balanceOfCollateral());
-            MarketLib.swapYieldBearingToWant(balanceOfYieldBearing());
+            MarketLib.swapYieldBearingToWant(balanceOfYieldBearing(), maxSlippage);
         }
     }
 
@@ -280,7 +292,8 @@ contract Strategy is BaseStrategy {
         // If we have enough want to convert and deposit more into aave, we do it
         // Here minSingleTrade represents the minimum investment of want that makes it worth it to loop
         uint256 initialCollRatio = getCurrentCollRatio();
-        uint256 currentVariableBorrowRate = uint256(lendingPool.getReserveData(address(borrowToken)).currentVariableBorrowRate); //1% borrowing APR = 1e25. Percentage value in wad (1e27)
+        //uint256 currentVariableBorrowRate = uint256(protocolDataProvider.getReserveData(address(borrowToken)).variableBorrowRate); //1% borrowing APR = 1e25. Percentage value in wad (1e27)
+        (,,,,,,uint256 currentVariableBorrowRate,,,,,) = protocolDataProvider.getReserveData(address(borrowToken)); //1% borrowing APR = 1e25. Percentage value in wad (1e27)
         if (currentVariableBorrowRate <= maxBorrowRate && balanceOfWant() > _debtOutstanding.add(minSingleTrade)) {
             MarketLib.wind(Math.min(maxSingleTrade, balanceOfWant().sub(_debtOutstanding)), collateralizationRatio, address(debtToken));
         } else if (balanceOfDebt() > 0) {
@@ -450,7 +463,7 @@ contract Strategy is BaseStrategy {
             MarketLib._wind(amount, amount.add(fee), _wantAmountInitialOrRequested, _collateralizationRatio);
         } else if (action == Action.UNWIND) {
             //amount = flashloanAmount, amount.add(fee) = flashloanAmount+fee for flashloan (usually 0)
-            MarketLib._unwind(amount, amount.add(fee), _wantAmountInitialOrRequested, _collateralizationRatio, address(aToken), address(debtToken));
+            MarketLib._unwind(amount, amount.add(fee), _wantAmountInitialOrRequested, _collateralizationRatio, address(aToken), address(debtToken), maxSlippage);
         }
     }
 
@@ -497,6 +510,11 @@ contract Strategy is BaseStrategy {
     // Effective collateralization ratio of the vault
     function getCurrentCollRatio() public view returns (uint256) {
         return _getCurrentPessimisticRatio(getWantPerYieldBearing());
+    }
+
+    // Helper function to display Liquidation Ratio
+    function getLiquidationRatio() external view returns (uint256) {
+        return MarketLib.getLiquidationRatio(); 
     }
 
     // check if the current baseFee is below our external target

@@ -70,7 +70,7 @@ def test_liquidate_position_without_enough_profit_by_selling_want(
 
 # In this test the strategy has enough profit to close the whole position
 def test_happy_liquidation(
-    chain, token, vault, test_strategy, token_whale, steth_whale, dai, dai_whale, user, amount, gov, steth
+    chain, token, vault, test_strategy, token_whale, wsteth_whale, dai, dai_whale, user, amount, gov, steth, wsteth
 ):
     # Deposit to the vault
     token.approve(vault.address, amount, {"from": user})
@@ -88,7 +88,7 @@ def test_happy_liquidation(
     days = 14
     #send some steth to simulate profit. 10% apr
     rewards_amount = amount/10/365*days
-    steth.transfer(test_strategy, rewards_amount*2, {'from': steth_whale})
+    wsteth.transfer(test_strategy, rewards_amount*2, {'from': wsteth_whale})
     chain.sleep(1)
 
 

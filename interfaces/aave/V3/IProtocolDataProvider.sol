@@ -1,10 +1,8 @@
-// SPDX-License-Identifier: agpl-3.0
-pragma solidity 0.6.12;
+// SPDX-License-Identifier: AGPL-3.0
+pragma solidity >=0.6.12;
 pragma experimental ABIEncoderV2;
 
-import {
-    ILendingPoolAddressesProvider
-} from "./ILendingPoolAddressesProvider.sol";
+import './IPoolAddressesProvider.sol';
 
 interface IProtocolDataProvider {
     struct TokenData {
@@ -15,7 +13,7 @@ interface IProtocolDataProvider {
     function ADDRESSES_PROVIDER()
         external
         view
-        returns (ILendingPoolAddressesProvider);
+        returns (IPoolAddressesProvider);
 
     function getAllReservesTokens() external view returns (TokenData[] memory);
 
@@ -36,17 +34,26 @@ interface IProtocolDataProvider {
             bool isActive,
             bool isFrozen
         );
+    
+    /**
+    * Returns the efficiency mode category of the reserve
+    * @param asset The address of the underlying asset of the reserve
+    * @return The eMode id of the reserve
+    */
+    function getReserveEModeCategory(address asset) external view returns (uint256);
 
     function getReserveData(address asset)
         external
         view
         returns (
-            uint256 availableLiquidity,
+            uint256 unbacked,
+            uint256 accruedToTreasuryScaled,
+            uint256 totalAToken,
             uint256 totalStableDebt,
             uint256 totalVariableDebt,
             uint256 liquidityRate,
             uint256 variableBorrowRate,
-            uint256 stableBorrowRate,
+            uint256 stableBorrowRate,   
             uint256 averageStableBorrowRate,
             uint256 liquidityIndex,
             uint256 variableBorrowIndex,

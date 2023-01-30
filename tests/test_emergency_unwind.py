@@ -3,7 +3,7 @@ from brownie import chain, reverts, Wei, Contract
 
 
 def test_passing_everything_should_repay_all_debt(
-    vault, strategy, token, token_whale, user, gov, dai, dai_whale, RELATIVE_APPROX_LOSSY, yieldBearing, steth_whale, RELATIVE_APPROX, steth
+    vault, strategy, token, token_whale, user, gov, dai, dai_whale, RELATIVE_APPROX_LOSSY, yieldBearing, wsteth_whale, RELATIVE_APPROX, wsteth
 ):
     amount = 1_000 * (10 ** token.decimals())
 
@@ -20,7 +20,7 @@ def test_passing_everything_should_repay_all_debt(
     days = 14
     #send some steth to simulate profit. 10% apr
     rewards_amount = amount/10/365*days
-    steth.transfer(strategy, rewards_amount*2, {'from': steth_whale})
+    wsteth.transfer(strategy, rewards_amount*2, {'from': wsteth_whale})
     chain.sleep(1)
     chain.sleep(1)
 
@@ -48,7 +48,7 @@ def test_passing_everything_should_repay_all_debt(
 
 
 def test_passing_everything_should_repay_all_debt_then_new_deposit_create_debt_again(
-    yieldBearing, vault, strategy, token, token_whale, user, gov, dai, dai_whale, RELATIVE_APPROX_LOSSY, steth_whale, RELATIVE_APPROX, steth
+    yieldBearing, vault, strategy, token, token_whale, user, gov, dai, dai_whale, RELATIVE_APPROX_LOSSY, wsteth_whale, RELATIVE_APPROX, wsteth
 ):
     amount = 1_000 * (10 ** token.decimals())
 
@@ -65,7 +65,7 @@ def test_passing_everything_should_repay_all_debt_then_new_deposit_create_debt_a
     days = 14
     #send some steth to simulate profit. 10% apr
     rewards_amount = amount/10/365*days
-    steth.transfer(strategy, rewards_amount*2, {'from': steth_whale})
+    wsteth.transfer(strategy, rewards_amount*2, {'from': wsteth_whale})
     chain.sleep(1)
 
     # Harvest 2: Realize profit

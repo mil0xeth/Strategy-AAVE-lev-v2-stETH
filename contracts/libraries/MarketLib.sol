@@ -12,13 +12,14 @@ import {
     Address
 } from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
-import "../../interfaces/aave/ILendingPool.sol";
-import "../../interfaces/aave/IProtocolDataProvider.sol";
+import "../../interfaces/aave/V3/IPool.sol";
+import "../../interfaces/aave/V3/IProtocolDataProvider.sol";
 import "../../interfaces/aave/IPriceOracle.sol";
 
 import "../../interfaces/UniswapInterfaces/IWETH.sol";
 
 import "../../interfaces/lido/ISteth.sol";
+import "../../interfaces/lido/IWsteth.sol";
 import "../../interfaces/curve/Curve.sol";
 
 interface IBalancer {
@@ -39,8 +40,9 @@ library MarketLib {
     //Strategy specific addresses:
     IWETH internal constant want = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
-    //stETH is yieldBearing:
-    ISteth internal constant yieldBearing =  ISteth(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
+    //wsteth is yieldBearing:
+    IWstETH internal constant yieldBearing = IWstETH(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
+    ISteth internal constant steth =  ISteth(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
     //WETH is borrowToken:
     IERC20 internal constant borrowToken = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     
@@ -48,10 +50,10 @@ library MarketLib {
     ICurveFi internal constant curve = ICurveFi(0xDC24316b9AE028F1497c275EB9192a3Ea0f67022);
 
     //AAVEV2 lending pool:
-    ILendingPool private constant lendingPool = ILendingPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
-    IProtocolDataProvider private constant protocolDataProvider = IProtocolDataProvider(0x057835Ad21a177dbdd3090bB1CAE03EaCF78Fc6d);
+    IPool private constant lendingPool = IPool(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2);
+    IProtocolDataProvider private constant protocolDataProvider = IProtocolDataProvider(0x7B4EB56E7CD4b454BA8ff71E4518426369a138a3);
     
-    IPriceOracle private constant priceOracle = IPriceOracle(0xA50ba011c48153De246E5192C8f9258A2ba79Ca9);
+    IPriceOracle private constant priceOracle = IPriceOracle(0x54586bE62E3c3580375aE3723C145253060Ca0C2);
     uint16 private constant aaveReferral = 7; // Yearn's aave referral code
     address private constant lidoReferral = 0x16388463d60FFE0661Cf7F1f31a7D658aC790ff7; //stratms. for recycling and redepositing
 
@@ -74,7 +76,9 @@ library MarketLib {
 
     // Liquidation ratio for the given ilk returned in [ray]
     function getLiquidationRatio() public view returns (uint256) {
-        (, , uint256 liquidationRatio, , , , , , , ) = protocolDataProvider.getReserveConfigurationData(address(yieldBearing));
+        //(,uint256 liquidationRatio,,,) = lendingPool.getEModeCategoryData(1);
+        uint256 liquidationRatio = uint256(lendingPool.getEModeCategoryData(1).liquidationThreshold);
+        //(, , uint256 liquidationRatio, , , , , , , ) = protocolDataProvider.getReserveConfigurationData(address(yieldBearing));
         // convert ltv value in bps to collateralization ratio in wad
         return LTV_BPS_TO_CZR.div(liquidationRatio);
     }
@@ -126,7 +130,7 @@ library MarketLib {
         borrowToken.transfer(address(balancer), flashloanRepayAmount);
     }
 
-    function _unwind(uint256 flashloanAmount, uint256 flashloanRepayAmount, uint256 wantAmountRequested, uint256 targetCollateralizationRatio, address aToken, address debtToken) external {
+    function _unwind(uint256 flashloanAmount, uint256 flashloanRepayAmount, uint256 wantAmountRequested, uint256 targetCollateralizationRatio, address aToken, address debtToken, uint256 maxSlippage) external {
         //Calculate leverage+1 to know how much totalRequestedInYieldBearing to swap for borrowToken
         uint256 leveragePlusOne = (RAY.mul(WAD).div((targetCollateralizationRatio.mul(1e9).sub(RAY)))).add(WAD);
         uint256 totalRequestedInYieldBearing = wantAmountRequested.mul(leveragePlusOne).div(getWantPerYieldBearing());
@@ -140,7 +144,7 @@ library MarketLib {
         _repayBorrowToken(flashloanAmount);
         _withdrawCollateral(totalRequestedInYieldBearing);
         //Desired collateral amount unlocked --> swap to want
-        _swapYieldBearingToWant(totalRequestedInYieldBearing);
+        _swapYieldBearingToWant(totalRequestedInYieldBearing, maxSlippage);
         //----> Want amount requested now in wallet
 
         //Now mint dai to repay flashloan: Rest of collateral is already locked, borrow dai equivalent to amount given by targetCollateralizationRatio:
@@ -182,6 +186,10 @@ library MarketLib {
         return yieldBearing.balanceOf(address(this));
     }
 
+    function balanceOfSteth() public view returns (uint256) {
+        return steth.balanceOf(address(this));
+    }
+
     // ----------------- INTERNAL FUNCTIONS -----------------
 
     function _initFlashLoan(bytes memory data, uint256 amount)
@@ -217,33 +225,37 @@ library MarketLib {
         want.withdraw(_amount);  
         _amount = address(this).balance;        
         //---ETH test if mint on Lido or buy on Curve --> STETH --- 
-        if (yieldBearing.isStakingPaused() == false && curve.get_dy(0, 1, _amount) <= _amount){
+        if (steth.isStakingPaused() == false && curve.get_dy(0, 1, _amount) <= _amount){
             //Lido mint: 
-            yieldBearing.submit{value: _amount}(lidoReferral);
+            steth.submit{value: _amount}(lidoReferral);
         }else{ 
-            //approve Curve ETH/stETH StableSwap & exchange eth to steth
-            _checkAllowance(address(curve), address(yieldBearing), _amount);       
+            //approve Curve ETH/steth StableSwap & exchange eth to steth
+            _checkAllowance(address(curve), address(steth), _amount);       
             curve.exchange{value: _amount}(0, 1, _amount, _amount); //at minimum get 1:1 for weth
         }
+        //---steth (wsteth wrap) --> WSTETH
+        uint256 stethBalance = balanceOfSteth();
+        _checkAllowance(address(yieldBearing), address(steth), stethBalance);
+        yieldBearing.wrap(stethBalance);
         return balanceOfYieldBearing();
     }
 
-    function _swapYieldBearingToWant(uint256 _amount) internal {
-    //function _swapYieldBearingToWant(uint256 _amount, uint256 _slippageProtection) internal {
+    function _swapYieldBearingToWant(uint256 _amount, uint256 _maxSlippage) internal {
         if (_amount == 0) {
             return;
         }
         _amount = Math.min(_amount, balanceOfYieldBearing());
+        _amount = yieldBearing.unwrap(_amount);
         //---STEHT --> ETH
-        uint256 slippageAllowance = _amount.mul(DENOMINATOR.sub(200)).div(DENOMINATOR);
-        _checkAllowance(address(curve), address(yieldBearing), _amount);
+        uint256 slippageAllowance = _amount.mul(DENOMINATOR.sub(_maxSlippage)).div(DENOMINATOR);
+        _checkAllowance(address(curve), address(steth), _amount);
         curve.exchange(1, 0, _amount, slippageAllowance);
         //Re-Wrap it back up: ETH to WETH
         want.deposit{value: address(this).balance}();
     }
 
-    function swapYieldBearingToWant(uint256 _amount) external {
-        _swapYieldBearingToWant(_amount);
+    function swapYieldBearingToWant(uint256 _amount, uint256 _maxSlippage) external {
+        _swapYieldBearingToWant(_amount, _maxSlippage);
     }
 
 ///////////////////////////////////////////

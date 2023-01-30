@@ -5,7 +5,7 @@ from eth_abi import encode_single
 
 
 def test_prod(
-    healthCheck, productionVault, yieldBearing, token, weth, dai, strategist, token_whale, dai_whale, MarketLibClonerChoice, Strategy, steth_whale, steth
+    healthCheck, productionVault, yieldBearing, token, weth, dai, strategist, token_whale, dai_whale, MarketLibClonerChoice, Strategy, wsteth_whale, wsteth,
 ):
 
     vault = productionVault
@@ -32,7 +32,7 @@ def test_prod(
         vault.updateStrategyDebtRatio(strat_address, 0, {"from": gov})
 
     vault.addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 0, {"from": gov})
-    strategy.setMinMaxSingleTrade(strategy.minSingleTrade(), 1e40, {"from": gov})
+    #strategy.setMinMaxSingleTrade(strategy.minSingleTrade(), 1e40, {"from": gov})
     token.approve(vault, 2 ** 256 - 1, {"from": token_whale})
     vault.deposit(2500 * (10 ** token.decimals()), {"from": token_whale})
 
@@ -54,7 +54,7 @@ def test_prod(
     days = 14
     #send some steth to simulate profit. 10% apr
     rewards_amount = 2500 * (10 ** token.decimals())/10/365*days
-    steth.transfer(strategy, rewards_amount*10, {'from': steth_whale})
+    wsteth.transfer(strategy, rewards_amount*10, {'from': wsteth_whale})
     chain.sleep(1)
 
     strategy.setDoHealthCheck(False, {"from": gov})
@@ -71,6 +71,7 @@ def test_prod(
     chain.mine(1)
     assert vault.strategies(strategy).dict()["totalLoss"] == 0
     vault.updateStrategyDebtRatio(strategy, 0, {"from": gov})
+    strategy.setMinMaxSingleTrade(strategy.minSingleTrade(), 1e40, {"from": gov})
     lossyharvest = strategy.harvest({"from": gov})
     print(f"After third harvest")
     print(f"strat estimatedTotalAssets: {strategy.estimatedTotalAssets()/1e18:_}")

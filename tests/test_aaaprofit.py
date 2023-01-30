@@ -20,7 +20,7 @@ def test_prod(yieldBearing, token, weth, gov, token_whale, Strategy, strategy, p
     vault.withdraw(vault.balanceOf(token_whale), token_whale, 1000, {"from": token_whale})
     assert ( pytest.approx(token.balanceOf(token_whale), rel=RELATIVE_APPROX_LOSSY) == user_balance_before )
 
-def test_profitable_harvest(strategy,vault, steth, token, token_whale, gov, steth_whale, weth):
+def test_profitable_harvest(strategy,vault, wsteth, token, token_whale, gov, wsteth_whale, weth):
 
     token.approve(vault, 2 ** 256 - 1, {"from": token_whale} )
     whalebefore = token.balanceOf(token_whale)
@@ -36,7 +36,7 @@ def test_profitable_harvest(strategy,vault, steth, token, token_whale, gov, stet
 
     #send some steth to simulate profit. 10% apr
     rewards_amount = whale_deposit/10/365*days
-    steth.transfer(strategy, rewards_amount*5, {'from': steth_whale})
+    wsteth.transfer(strategy, rewards_amount*5, {'from': wsteth_whale})
 
     strategy.harvest({'from': gov})
 

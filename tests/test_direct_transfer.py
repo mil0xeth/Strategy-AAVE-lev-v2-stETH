@@ -37,12 +37,12 @@ def test_borrow_token_transfer_invests(
     vault, strategy, token, token_whale, borrow_token, borrow_whale, gov, Contract,
 ):
     token.approve(vault, 2 ** 256 - 1, {"from": token_whale})
-    vault.deposit(1000 * (10 ** token.decimals()), {"from": token_whale})
+    vault.deposit(100 * (10 ** token.decimals()), {"from": token_whale})
 
     chain.sleep(1)
     strategy.harvest({"from": gov})
 
-    amount = 4_000 * (10 ** borrow_token.decimals())
+    amount = 4_00 * (10 ** borrow_token.decimals())
     borrow_token.transfer(strategy, amount, {"from": borrow_whale})
     chain.sleep(1)
     with pytest.reverts("!healthcheck"):
@@ -96,7 +96,7 @@ def test_deposit_should_not_increment_profits(vault, strategy, token, token_whal
 
 
 def test_direct_transfer_with_actual_profits_100k(
-    vault, token, token_whale, borrow_token, borrow_whale, gov, test_strategy, Contract, steth_whale, steth
+    vault, token, token_whale, borrow_token, borrow_whale, gov, test_strategy, Contract, wsteth_whale, wsteth
 ):
     strategy = test_strategy
     initialProfit = vault.strategies(strategy).dict()["totalGain"]
@@ -113,7 +113,7 @@ def test_direct_transfer_with_actual_profits_100k(
     days = 14
     #send some steth to simulate profit. 10% apr
     rewards_amount = 1e3* (10 ** token.decimals())/10/365*days
-    steth.transfer(strategy, rewards_amount*2, {'from': steth_whale})
+    wsteth.transfer(strategy, rewards_amount*2, {'from': wsteth_whale})
     chain.sleep(1)
 
     # sleep for a day
@@ -136,7 +136,7 @@ def test_direct_transfer_with_actual_profits_100k(
 
 
 def test_direct_transfer_with_actual_profits_1000(
-    vault, token, token_whale, borrow_token, borrow_whale, gov, test_strategy, Contract, steth_whale, steth
+    vault, token, token_whale, borrow_token, borrow_whale, gov, test_strategy, Contract, wsteth_whale, wsteth
 ):
     strategy = test_strategy
     initialProfit = vault.strategies(strategy).dict()["totalGain"]
@@ -153,7 +153,7 @@ def test_direct_transfer_with_actual_profits_1000(
     days = 14
     #send some steth to simulate profit. 10% apr
     rewards_amount = 1000* (10 ** token.decimals())/10/365*days
-    steth.transfer(strategy, rewards_amount*2, {'from': steth_whale})
+    wsteth.transfer(strategy, rewards_amount*2, {'from': wsteth_whale})
     chain.sleep(1)
     chain.sleep(1)
     # sleep for a day
