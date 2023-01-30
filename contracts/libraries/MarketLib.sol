@@ -126,7 +126,7 @@ library MarketLib {
         borrowToken.transfer(address(balancer), flashloanRepayAmount);
     }
 
-    function _unwind(uint256 flashloanAmount, uint256 flashloanRepayAmount, uint256 wantAmountRequested, uint256 targetCollateralizationRatio, address aToken, address debtToken) external {
+    function _unwind(uint256 flashloanAmount, uint256 flashloanRepayAmount, uint256 wantAmountRequested, uint256 targetCollateralizationRatio, address aToken, address debtToken, uint256 maxSlippage) external {
         //Calculate leverage+1 to know how much totalRequestedInYieldBearing to swap for borrowToken
         uint256 leveragePlusOne = (RAY.mul(WAD).div((targetCollateralizationRatio.mul(1e9).sub(RAY)))).add(WAD);
         uint256 totalRequestedInYieldBearing = wantAmountRequested.mul(leveragePlusOne).div(getWantPerYieldBearing());
@@ -140,7 +140,7 @@ library MarketLib {
         _repayBorrowToken(flashloanAmount);
         _withdrawCollateral(totalRequestedInYieldBearing);
         //Desired collateral amount unlocked --> swap to want
-        _swapYieldBearingToWant(totalRequestedInYieldBearing);
+        _swapYieldBearingToWant(totalRequestedInYieldBearing, maxSlippage);
         //----> Want amount requested now in wallet
 
         //Now mint dai to repay flashloan: Rest of collateral is already locked, borrow dai equivalent to amount given by targetCollateralizationRatio:
@@ -228,22 +228,21 @@ library MarketLib {
         return balanceOfYieldBearing();
     }
 
-    function _swapYieldBearingToWant(uint256 _amount) internal {
-    //function _swapYieldBearingToWant(uint256 _amount, uint256 _slippageProtection) internal {
+    function _swapYieldBearingToWant(uint256 _amount, uint256 _maxSlippage) internal {
         if (_amount == 0) {
             return;
         }
         _amount = Math.min(_amount, balanceOfYieldBearing());
         //---STEHT --> ETH
-        uint256 slippageAllowance = _amount.mul(DENOMINATOR.sub(200)).div(DENOMINATOR);
+        uint256 slippageAllowance = _amount.mul(DENOMINATOR.sub(_maxSlippage)).div(DENOMINATOR);
         _checkAllowance(address(curve), address(yieldBearing), _amount);
         curve.exchange(1, 0, _amount, slippageAllowance);
         //Re-Wrap it back up: ETH to WETH
         want.deposit{value: address(this).balance}();
     }
 
-    function swapYieldBearingToWant(uint256 _amount) external {
-        _swapYieldBearingToWant(_amount);
+    function swapYieldBearingToWant(uint256 _amount, uint256 _maxSlippage) external {
+        _swapYieldBearingToWant(_amount, _maxSlippage);
     }
 
 ///////////////////////////////////////////

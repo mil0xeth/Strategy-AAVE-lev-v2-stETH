@@ -65,6 +65,8 @@ contract Strategy is BaseStrategy {
     uint256 public maxSingleTrade;
     // Minimum Single Trade & Minimum Profit to be taken:
     uint256 public minSingleTrade;
+    // Maximum slipapge accepted for curve trades:
+    uint256 private maxSlippage;
 
     //Expected flashloan fee:
     uint256 public expectedFlashloanFee;
@@ -108,6 +110,9 @@ contract Strategy is BaseStrategy {
         maxSingleTrade = 1_000 * 1e18;
         //0.001 ETH minimum trade
         minSingleTrade = 1 * 1e15;
+
+        //maximum acceptable slippage in basis points: 100 = 1%
+        maxSlippage = 200;
 
         creditThreshold = 1e3 * 1e18;
         maxReportDelay = 21 days; // 21 days in seconds, if we hit this then harvestTrigger = True
@@ -153,6 +158,10 @@ contract Strategy is BaseStrategy {
         maxSingleTrade = _maxSingleTrade;
     }
 
+    function setMaxSlippage(uint256 _maxSlippage) external onlyVaultManagers {
+        maxSlippage = _maxSlippage;
+    }
+
     function setMaxBorrowRate (uint256 _maxBorrowRate) external onlyVaultManagers {
         maxBorrowRate = _maxBorrowRate;
     }
@@ -192,7 +201,7 @@ contract Strategy is BaseStrategy {
         MarketLib.repayBorrowToken(wantBalance);
         MarketLib.withdrawCollateral(repayAmountOfCollateral);
         //Desired collateral amount unlocked --> swap to want
-        MarketLib.swapYieldBearingToWant(repayAmountOfCollateral);
+        MarketLib.swapYieldBearingToWant(repayAmountOfCollateral, maxSlippage);
         //Pay down debt with freed collateral that was swapped to want:
         wantBalance = balanceOfWant();
         wantBalance = Math.min(wantBalance, balanceOfDebt());
@@ -200,7 +209,7 @@ contract Strategy is BaseStrategy {
         //If all debt is paid down, free all collateral and swap to want:
         if (balanceOfDebt() == 0){
             MarketLib.withdrawCollateral(balanceOfCollateral());
-            MarketLib.swapYieldBearingToWant(balanceOfYieldBearing());
+            MarketLib.swapYieldBearingToWant(balanceOfYieldBearing(), maxSlippage);
         }
     }
 
@@ -450,7 +459,7 @@ contract Strategy is BaseStrategy {
             MarketLib._wind(amount, amount.add(fee), _wantAmountInitialOrRequested, _collateralizationRatio);
         } else if (action == Action.UNWIND) {
             //amount = flashloanAmount, amount.add(fee) = flashloanAmount+fee for flashloan (usually 0)
-            MarketLib._unwind(amount, amount.add(fee), _wantAmountInitialOrRequested, _collateralizationRatio, address(aToken), address(debtToken));
+            MarketLib._unwind(amount, amount.add(fee), _wantAmountInitialOrRequested, _collateralizationRatio, address(aToken), address(debtToken), maxSlippage);
         }
     }
 
@@ -497,6 +506,11 @@ contract Strategy is BaseStrategy {
     // Effective collateralization ratio of the vault
     function getCurrentCollRatio() public view returns (uint256) {
         return _getCurrentPessimisticRatio(getWantPerYieldBearing());
+    }
+
+    // Helper function to display Liquidation Ratio
+    function getLiquidationRatio() external view returns (uint256) {
+        return MarketLib.getLiquidationRatio();
     }
 
     // check if the current baseFee is below our external target
