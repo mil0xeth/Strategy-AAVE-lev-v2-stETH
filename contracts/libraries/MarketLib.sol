@@ -88,7 +88,7 @@ library MarketLib {
             return;
         }
         //Calculate how much borrowToken to mint to leverage up to targetCollateralizationRatio:
-        uint256 flashloanAmount = wantAmountInitial.mul(RAY).div(targetCollateralizationRatio.mul(1e9).sub(RAY));
+        uint256 flashloanAmount = wantAmountInitial.mul(RAY).div(targetCollateralizationRatio.mul(1e9).sub(RAY)); //multiplication with 1e9 to bring the collateralization ratio to RAY precision
         //Retrieve upper max limit of flashloan:
         uint256 flashloanMaximum = borrowToken.balanceOf(address(balancer));
         //Cap flashloan only up to maximum allowed:

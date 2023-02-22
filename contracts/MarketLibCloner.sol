@@ -14,23 +14,11 @@ contract MarketLibCloner {
     constructor(
         address _vault,
         string memory _strategyName
-    //    bytes32 _ilk_want,
-    //    bytes32 _ilk_yieldBearing,
-    //    address _gemJoin
-   //     address _wantToUSDOSMProxy
-   //     address _yieldBearingToUSDOSMProxy
-   //     address _chainlinkWantToETHPriceFeed
     ) public {
         Strategy _original =
             new Strategy(
                 _vault,
                 _strategyName
-   //             _ilk_want,
-   //             _ilk_yieldBearing,
-   //             _gemJoin
-    //            _wantToUSDOSMProxy
-    //            _yieldBearingToUSDOSMProxy
-    //            _chainlinkWantToETHPriceFeed
             );
         emit Deployed(address(_original));
 
@@ -53,14 +41,7 @@ contract MarketLibCloner {
         address _rewards,
         address _keeper,
         string memory _strategyName
- //       bytes32 _ilk_want,
- //       bytes32 _ilk_yieldBearing,
- //       address _gemJoin
- //       address _wantToUSDOSMProxy
- //       address _yieldBearingToUSDOSMProxy
- //       address _chainlinkWantToETHPriceFeed
     ) external returns (address payable newStrategy) {
-        // Copied from https://github.com/optionality/clone-factory/blob/master/contracts/CloneFactory.sol
         bytes20 addressBytes = bytes20(original);
         assembly {
             // EIP-1167 bytecode
@@ -80,12 +61,6 @@ contract MarketLibCloner {
         Strategy(newStrategy).initialize(
             _vault,
             _strategyName
-   //         _ilk_want,
-   //         _ilk_yieldBearing,
-   //         _gemJoin
-   //         _wantToUSDOSMProxy
-   //         _yieldBearingToUSDOSMProxy
-   //         _chainlinkWantToETHPriceFeed
         );
         Strategy(newStrategy).setKeeper(_keeper);
         Strategy(newStrategy).setRewards(_rewards);
