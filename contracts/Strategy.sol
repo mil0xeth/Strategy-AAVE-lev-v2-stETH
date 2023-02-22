@@ -251,40 +251,37 @@ contract Strategy is BaseStrategy {
     {
         uint256 totalDebt = vault.strategies(address(this)).totalDebt;
         uint256 totalAssetsAfterProfit = estimatedTotalAssets();
-        uint256 _amountFreed;
-        uint256 toWithdraw = _profit.add(_debtOutstanding);
-        //Here minSingleTrade represents the minimum profit of want that should be given back to the vault
-        if (totalAssetsAfterProfit > totalDebt.add(minSingleTrade)){
-            _profit = totalAssetsAfterProfit.sub(totalDebt);
-            toWithdraw = _profit.add(_debtOutstanding);
-            (_amountFreed, _loss) = liquidatePosition(toWithdraw);
-            //Net profit and loss calculation
-            if (_loss > _profit) {
-                _loss = _loss.sub(_profit);
-                _profit = 0;
-            } else {
-                _profit = _profit.sub(_loss);
-                _loss = 0;
-            }
+
+        if (totalAssetsAfterProfit >= totalDebt) {
+            _profit = totalAssetsAfterProfit.sub(totalDebt); //scenario when strategy is in profit:
         } else { //scenario when strategy is in loss:
-            //vault is requesting want back, but strategy is at loss:
-            if (_debtOutstanding >= minSingleTrade) {
-                toWithdraw = _debtOutstanding;
-                (_amountFreed, _loss) = liquidatePosition(toWithdraw);
-            }
-            //report strategy loss to vault accurately:
-            if (totalDebt > totalAssetsAfterProfit) {
-                _loss = _loss.add(totalDebt).sub(totalAssetsAfterProfit);
-            }
+            _loss = totalDebt.sub(totalAssetsAfterProfit);
         }
 
-        //profit + _debtOutstanding must be <= wantBalance. Prioritise profit first:
+        uint256 toLiquidate = _debtOutstanding.add(_profit); //how much to liquidate from strategy's position back to want
+        //Here minSingleTrade represents the minimum profit of want that should be given back to the vault
+        if (toLiquidate >= minSingleTrade) {
+            (uint256 _amountFreed, uint256 _liquidationLoss) = liquidatePosition(toLiquidate);
+            _debtPayment = Math.min(_debtOutstanding, _amountFreed);
+            _loss = _loss.add(_liquidationLoss);
+        }
+
+        //Net profit and loss calculation
+        if (_loss > _profit) {
+            _loss = _loss.sub(_profit);
+            _profit = 0;
+        } else {
+            _profit = _profit.sub(_loss);
+            _loss = 0;
+        }
+
+        //maxSingleTrade requires _profit + _debtOutstanding <= wantBalance check. Prioritise profit first:
         uint256 wantBalance = balanceOfWant();
-        if(wantBalance < _profit){
+        if (wantBalance < _profit){
             _profit = wantBalance;
-        }else if(wantBalance < toWithdraw){
+        } else if (wantBalance < toLiquidate){
             _debtPayment = wantBalance.sub(_profit);
-        }else{
+        } else {
             _debtPayment = _debtOutstanding;
         }
 
